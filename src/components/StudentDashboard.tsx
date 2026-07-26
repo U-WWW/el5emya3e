@@ -49,7 +49,8 @@ import {
   Unlock,
   CheckCircle2,
   XCircle,
-  Eye
+  Eye,
+  AlertTriangle
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import CryptoJS from 'crypto-js';
@@ -490,24 +491,81 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages, isChatLoading]);
 
-  // Handle countdown timer for exam
+  // Auto-restore active exam session on mount or student login
   useEffect(() => {
-    if (activeQuiz && quizTimer > 0) {
-      timerRef.current = setTimeout(() => {
-        setQuizTimer(prev => {
-          if (prev <= 1) {
-            // Auto submit when timer runs out
-            submitActiveQuiz();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
+    if (!student?.code) return;
+
+    const rawSession = localStorage.getItem('jamal_active_exam_' + student.code);
+    if (!rawSession) return;
+
+    try {
+      const session = JSON.parse(rawSession);
+      if (session.studentCode === student.code && session.quiz && session.quizQuestions) {
+        const now = Date.now();
+        const remainingMs = session.endTime - now;
+        const remainingSecs = Math.max(0, Math.floor(remainingMs / 1000));
+
+        if (remainingSecs > 0) {
+          // Resume active exam session
+          setActiveQuiz(session.quiz);
+          setQuizQuestions(session.quizQuestions);
+          setSelectedAnswers(session.selectedAnswers || {});
+          setQuizTimer(remainingSecs);
+        } else {
+          // Time expired while off-line / closed! Auto-submit!
+          alert("🚨 تنبيه: لقد انتهى وقت الاختبار المتبقي أثناء خروجك، وتم تسليم إجاباتك المسجلة تلقائياً.");
+          performQuizSubmission(session.quiz, session.quizQuestions, session.selectedAnswers || {});
+        }
+      }
+    } catch (e) {
+      console.error("Error restoring active exam session:", e);
     }
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+  }, [student]);
+
+  // Handle real timestamp countdown timer for active exam
+  useEffect(() => {
+    if (!activeQuiz || !student?.code || examSubmittedResult) return;
+
+    const interval = setInterval(() => {
+      const raw = localStorage.getItem('jamal_active_exam_' + student.code);
+      if (!raw) {
+        setQuizTimer(0);
+        return;
+      }
+
+      try {
+        const session = JSON.parse(raw);
+        const now = Date.now();
+        const remainingSecs = Math.max(0, Math.floor((session.endTime - now) / 1000));
+        setQuizTimer(remainingSecs);
+
+        if (remainingSecs <= 0) {
+          clearInterval(interval);
+          performQuizSubmission(activeQuiz, quizQuestions, selectedAnswers);
+        }
+      } catch (e) {
+        console.error("Timer check error:", e);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [activeQuiz, student, examSubmittedResult, quizQuestions, selectedAnswers]);
+
+  // Prevent closing / navigating away during an active exam
+  useEffect(() => {
+    if (!activeQuiz || examSubmittedResult) return;
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '🚨 تنبيه: الاختبار جارٍ الآن ولا يمكنك إلغاؤه! إغلاق الصفحة لن يوقف الوقت وسيتم تسليم إجاباتك عند انتهاء الوقت.';
+      return e.returnValue;
     };
-  }, [activeQuiz, quizTimer]);
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [activeQuiz, examSubmittedResult]);
 
   const fetchStudentData = async (code: string, className: string) => {
     setLoading(true);
@@ -745,7 +803,27 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
     }
   };
 
-  // Launch interactive mission (quiz)
+  // Handle student answer selection with immediate state & localStorage session sync
+  const handleSelectAnswer = (qId: string, choiceLabel: string) => {
+    setSelectedAnswers(prev => {
+      const next = { ...prev, [qId]: choiceLabel };
+      if (student?.code) {
+        const raw = localStorage.getItem('jamal_active_exam_' + student.code);
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            parsed.selectedAnswers = next;
+            localStorage.setItem('jamal_active_exam_' + student.code, JSON.stringify(parsed));
+          } catch (e) {
+            console.error("Error updating active exam session answers:", e);
+          }
+        }
+      }
+      return next;
+    });
+  };
+
+  // Launch interactive mission (quiz) with mandatory lock & persistent timer
   const launchExam = async (quiz: any) => {
     // Check if already completed on this device or in past results
     const pastResult = studentResults.find(r => r.quiz_id === quiz.id);
@@ -754,6 +832,17 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
       setViewingResultDetails(pastResult);
       return;
     }
+
+    if (localStorage.getItem('jamal_completed_quiz_' + quiz.id)) {
+      alert("لقد قمت بإكمال هذا الاختبار سابقاً ولا يمكنك إعادته.");
+      return;
+    }
+
+    // Explicit confirmation warning before starting
+    const confirmStart = confirm(
+      `🚨 تنبيه هام جداً للاختبار:\n\nبمجرد بدء الاختبار ("${quiz.quiz_name}")، سيبدأ حساب الوقت فوراً ولن تتمكن من إلغاء الاختبار أو الخروج منه.\n\nحتى لو قمت بتحديث الصفحة أو إغلاق المتصفح، سيبدأ المؤقت بالتراجع وسيتم الاحتفاظ بإجاباتك وتسليم الاختبار تلقائياً عند انتهاء الوقت!\n\nهل أنت جاهز ومستعد لبدء الاختبار الآن؟`
+    );
+    if (!confirmStart) return;
 
     setLoading(true);
     try {
@@ -766,31 +855,56 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
         return;
       }
 
+      const durationMins = quiz.duration_minutes ? Number(quiz.duration_minutes) : (qList.length * 5);
+      const startTimeMs = Date.now();
+      const endTimeMs = startTimeMs + (durationMins * 60 * 1000);
+
+      // Save persistent exam session to localStorage
+      const examSession = {
+        studentCode: student.code,
+        quiz,
+        quizQuestions: qList,
+        selectedAnswers: {},
+        startTime: startTimeMs,
+        endTime: endTimeMs
+      };
+      localStorage.setItem('jamal_active_exam_' + student.code, JSON.stringify(examSession));
+
       setQuizQuestions(qList);
       setSelectedAnswers({});
       setActiveQuiz(quiz);
       setExamSubmittedResult(null);
-      
-      // Set timer based on teacher-configured duration_minutes or default 5 mins per question
-      const durationMins = quiz.duration_minutes ? Number(quiz.duration_minutes) : (qList.length * 5);
-      setQuizTimer(durationMins * 60); 
+      setQuizTimer(durationMins * 60);
 
     } catch (err) {
-      console.error("Error fetching questions:", err);
+      console.error("Error launching exam:", err);
+      alert("حدث خطأ أثناء فتح الاختبار، يرجى إعادة المحاولة.");
     } finally {
       setLoading(false);
     }
   };
 
   const submitActiveQuiz = async () => {
+    if (!activeQuiz || isSubmittingExam) return;
+
+    const unansweredCount = quizQuestions.length - Object.keys(selectedAnswers).length;
+    if (quizTimer > 0 && unansweredCount > 0) {
+      const confirmSubmit = confirm(`تنبيه: يوجد ${unansweredCount} أسئلة لم تجب عليها بعد!\nهل أنت متأكد من رغبتك في تسليم الاختبار الآن؟`);
+      if (!confirmSubmit) return;
+    }
+
+    await performQuizSubmission(activeQuiz, quizQuestions, selectedAnswers);
+  };
+
+  const performQuizSubmission = async (quiz: any, questions: any[], answers: { [key: string]: string }) => {
     if (isSubmittingExam) return;
     setIsSubmittingExam(true);
 
     if (timerRef.current) clearTimeout(timerRef.current);
 
     let score = 0;
-    const studentAnswers = quizQuestions.map(q => {
-      const isCorrect = selectedAnswers[q.id] === q.correct_answer;
+    const studentAnswers = questions.map(q => {
+      const isCorrect = answers[q.id] === q.correct_answer;
       if (isCorrect) score++;
       return {
         question_id: q.id || '',
@@ -800,7 +914,7 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
         choice_c: q.choice_c || '',
         choice_d: q.choice_d || '',
         correct_answer: q.correct_answer || 'A',
-        selected_answer: selectedAnswers[q.id] || 'لم يجب'
+        selected_answer: answers[q.id] || 'لم يجب'
       };
     });
 
@@ -813,25 +927,26 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
         phone: student.phone,
         class_name: student.className,
         group_name: student.groupName,
-        quiz_id: activeQuiz.id,
-        quiz_name: activeQuiz.quiz_name,
+        quiz_id: quiz.id,
+        quiz_name: quiz.quiz_name,
         score: score,
-        total_questions: quizQuestions.length,
+        total_questions: questions.length,
         submittedAt: submittedAtISO,
         student_answers: studentAnswers
       };
 
       const docRef = await addDoc(collection(db, 'results'), resultData);
 
-      // Save locally to prevent re-attempts
-      localStorage.setItem('jamal_completed_quiz_' + activeQuiz.id, 'true');
+      // Mark locally completed & remove active exam lock session
+      localStorage.setItem('jamal_completed_quiz_' + quiz.id, 'true');
+      localStorage.removeItem('jamal_active_exam_' + student.code);
 
       // Create QR Verification code
       const qrData = {
         name: student.name,
         code: student.code,
-        score: `${score}/${quizQuestions.length}`,
-        quiz_id: activeQuiz.id,
+        score: `${score}/${questions.length}`,
+        quiz_id: quiz.id,
         timestamp: submittedAtISO
       };
       const encrypted = CryptoJS.AES.encrypt(JSON.stringify(qrData), SECRET_KEY).toString();
@@ -839,16 +954,19 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
 
       const savedResultWithId = { ...resultData, id: docRef.id };
 
+      setActiveQuiz(quiz);
+      setQuizQuestions(questions);
+      setSelectedAnswers(answers);
       setExamSubmittedResult({
         score,
-        total: quizQuestions.length,
+        total: questions.length,
         qrCodeUrl: qrUrl,
         code: student.code,
         resultObj: savedResultWithId
       });
 
       // Update local state to show completed quiz
-      setStudentResults(prev => [...prev, savedResultWithId]);
+      setStudentResults(prev => [...prev.filter(r => r.quiz_id !== quiz.id), savedResultWithId]);
 
       // Fetch student data to update total score
       await fetchStudentData(student.code, student.className);
@@ -1467,6 +1585,17 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
 
                 {!examSubmittedResult ? (
                   <>
+                    {/* Security Lock Notice */}
+                    <div className="mb-6 bg-amber-950/60 border border-amber-500/40 text-amber-300 p-3 rounded-xl text-xs font-bold flex items-center justify-between gap-2 shadow-inner">
+                      <span className="flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 animate-pulse" />
+                        الاختبار مقفول وقيد التنفيذ — يُحسب الوقت بانتظام ولن يتوقف عند إغلاق أو تحديث الصفحة.
+                      </span>
+                      <span className="bg-rose-950/80 border border-rose-800 text-rose-300 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">
+                        لا يمكن الإلغاء 🔒
+                      </span>
+                    </div>
+
                     {/* Live Progress Bar */}
                     <div className="w-full bg-stone-950 h-3 border border-gray-800 rounded-full mb-8 overflow-hidden">
                       <div 
@@ -1495,7 +1624,7 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
                             ].map(choice => (
                               <button
                                 key={choice.label}
-                                onClick={() => setSelectedAnswers(prev => ({ ...prev, [q.id]: choice.label }))}
+                                onClick={() => handleSelectAnswer(q.id, choice.label)}
                                 className={`text-right p-4 rounded-xl border-2 font-bold transition flex items-center justify-between ${
                                   selectedAnswers[q.id] === choice.label
                                     ? 'bg-rose-950/30 border-amber-600 text-stone-100'
@@ -1517,24 +1646,13 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
                       ))}
                     </div>
 
-                    <div className="mt-8 pt-4 border-t border-gray-800 flex justify-end gap-4">
-                      <button 
-                        onClick={() => {
-                          if (confirm("هل أنت متأكد من رغبتك في إلغاء الاختبار؟ لن يتم حفظ تقدمك.")) {
-                            setActiveQuiz(null);
-                          }
-                        }}
-                        className="bg-gray-900 border border-gray-800 hover:bg-gray-800 text-gray-400 px-6 py-3 rounded-xl font-bold transition"
-                      >
-                        إلغاء المهمة
-                      </button>
-
+                    <div className="mt-8 pt-4 border-t border-gray-800 flex justify-end">
                       <button
                         onClick={submitActiveQuiz}
-                        disabled={Object.keys(selectedAnswers).length < quizQuestions.length || isSubmittingExam}
-                        className="bg-amber-600 hover:bg-amber-500 disabled:bg-gray-800 disabled:text-gray-500 text-stone-100 font-black px-8 py-3 rounded-xl transition flex items-center gap-2 text-lg shadow-[0_4px_15px_rgba(226,54,54,0.4)]"
+                        disabled={isSubmittingExam}
+                        className="w-full sm:w-auto bg-amber-600 hover:bg-amber-500 disabled:bg-gray-800 disabled:text-gray-500 text-stone-100 font-black px-8 py-3.5 rounded-xl transition flex items-center justify-center gap-2 text-lg shadow-[0_4px_15px_rgba(226,54,54,0.4)]"
                       >
-                        {isSubmittingExam ? 'جاري الإرسال...' : 'إنهاء المهمة وتسليم الإجابات'}
+                        {isSubmittingExam ? 'جاري الإرسال...' : 'إنهاء المهمة وتسليم الإجابات 🏁'}
                       </button>
                     </div>
                   </>
