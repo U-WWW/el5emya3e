@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>منصة الخيميائي - واجهة الطالب الذكية</title>
+    
+    <!-- Google Fonts: Cairo -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- FontAwesome 6 CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Cairo', 'sans-serif'],
+                    },
+                    colors: {
+                        indigo: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Cairo', sans-serif;
+            background-color: #f8fafc;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen">
+
+    <!-- LOGIN SCREEN CONTAINER -->
+    <div id="loginScreen" class="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
+        <!-- Ambient Background Lights -->
+        <div class="absolute top-0 right-1/4 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div class="absolute bottom-0 left-1/4 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div class="w-full max-w-md bg-white/80 backdrop-blur-xl border border-slate-200/80 rounded-3xl p-8 shadow-2xl relative z-10 space-y-6">
+            <!-- Header Brand -->
+            <div class="text-center space-y-2">
+                <div class="w-16 h-16 mx-auto rounded-3xl bg-indigo-600 text-white flex items-center justify-center shadow-xl shadow-indigo-600/30 text-3xl font-black">
+                    🧪
+                </div>
+                <h1 class="text-2xl font-black text-slate-900 tracking-tight">
+                    منصة الخيميائي التعليمية
+                </h1>
+                <p class="text-xs font-bold text-slate-500">
+                    واجهة الطالب الذكية لمتابعة التقييمات والنتائج
+                </p>
+            </div>
+
+            <!-- Login Form -->
+            <form id="loginForm" onsubmit="event.preventDefault(); handleLogin();" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-2">
+                        كود الطالب الخاص بك (Student Code)
+                    </label>
+                    <div class="relative">
+                        <input
+                            type="text"
+                            id="studentCodeInput"
+                            placeholder="أدخل الكود مثل: ALC-101"
+                            class="w-full bg-slate-100/80 border border-slate-300 rounded-2xl px-4 py-3.5 pl-11 text-sm font-black text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition"
+                            dir="ltr"
+                        />
+                        <div class="absolute left-3.5 top-3.5 text-slate-400">
+                            <i class="fa-solid fa-user"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Error Box -->
+                <div id="loginError" class="hidden p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 text-xs font-bold flex items-center gap-2">
+                    <i class="fa-solid fa-circle-exclamation text-rose-600 shrink-0"></i>
+                    <span id="loginErrorText">كود الطالب غير صحيح!</span>
+                </div>
+
+                <button
+                    type="submit"
+                    class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-2xl shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-2 text-sm transition transform active:scale-95"
+                >
+                    <span>تسجيل الدخول إلى لوحة المتابعة</span>
+                    <i class="fa-solid fa-arrow-left"></i>
+                </button>
+            </form>
+
+            <!-- Demo Quick Login Buttons -->
+            <div class="pt-4 border-t border-slate-200/80 space-y-2">
+                <span class="text-[11px] font-bold text-slate-400 block text-center">
+                    💡 أكواد تجريبية سريعة للاختبار:
+                </span>
+                <div class="grid grid-cols-1 gap-2">
+                    <button onclick="quickLogin('ALC-101')" class="w-full bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 border border-slate-200 text-slate-700 font-bold text-xs py-2 px-3 rounded-xl flex items-center justify-between transition">
+                        <span class="font-mono bg-white px-2 py-0.5 rounded border">ALC-101</span>
+                        <span>أحمد علي (الأول في المجموعة 🥇)</span>
+                    </button>
+                    <button onclick="quickLogin('ALC-102')" class="w-full bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 border border-slate-200 text-slate-700 font-bold text-xs py-2 px-3 rounded-xl flex items-center justify-between transition">
+                        <span class="font-mono bg-white px-2 py-0.5 rounded border">ALC-102</span>
+                        <span>مريم محمد (الثاني 🥈)</span>
+                    </button>
+                    <button onclick="quickLogin('ALC-103')" class="w-full bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 border border-slate-200 text-slate-700 font-bold text-xs py-2 px-3 rounded-xl flex items-center justify-between transition">
+                        <span class="font-mono bg-white px-2 py-0.5 rounded border">ALC-103</span>
+                        <span>زياد محمود (يحتوي غياب ⚠️)</span>
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- MAIN DASHBOARD CONTAINER -->
+    <div id="dashboardScreen" class="hidden min-h-screen pb-16">
+        
+        <!-- TOP HEADER -->
+        <header class="bg-white/80 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-30 shadow-sm">
+            <div class="max-w-5xl mx-auto px-4 py-3.5 flex items-center justify-between gap-4">
+                
+                <div class="flex items-center gap-3">
+                    <img id="studentAvatar" src="" alt="Student Avatar" class="w-11 h-11 rounded-2xl object-cover ring-2 ring-indigo-600/20 shadow-md">
+                    <div>
+                        <h2 id="studentNameHeader" class="text-base font-black text-slate-900 leading-tight">--</h2>
+                        <p id="studentGroupHeader" class="text-xs font-bold text-slate-500 flex items-center gap-1 mt-0.5">
+                            <i class="fa-solid fa-users text-indigo-600"></i>
+                            <span>--</span>
+                        </p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <select id="monthSelector" onchange="changeMonth(this.value)" class="bg-slate-100 text-slate-800 font-black text-xs py-2.5 px-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-600 cursor-pointer">
+                        <option value="مارس 2026">مارس 2026 (الشهر الحالي)</option>
+                        <option value="فبراير 2026">فبراير 2026</option>
+                        <option value="يناير 2026">يناير 2026</option>
+                    </select>
+
+                    <button onclick="handleLogout()" class="p-2.5 rounded-2xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 transition" title="تسجيل الخروج">
+                        <i class="fa-solid fa-right-from-bracket"></i>
+                    </button>
+                </div>
+
+            </div>
+        </header>
+
+        <!-- DASHBOARD BODY -->
+        <main class="max-w-5xl mx-auto px-4 pt-6 space-y-6">
+
+            <!-- Active Month Badge -->
+            <div class="flex items-center justify-between bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm">
+                <div class="flex items-center gap-2.5">
+                    <div class="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                        <i class="fa-solid fa-calendar-days text-lg"></i>
+                    </div>
+                    <div>
+                        <span class="text-xs font-bold text-slate-400 block">شهر التقييم المعروض</span>
+                        <span id="activeMonthDisplay" class="text-sm font-black text-slate-900 flex items-center gap-1.5">
+                            مارس 2026
+                            <span class="bg-emerald-100 text-emerald-700 text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-300">نشط الآن</span>
+                        </span>
+                    </div>
+                </div>
+
+                <div class="text-left">
+                    <span class="text-xs font-bold text-slate-400 block">كود الطالب</span>
+                    <span id="studentCodeBadge" class="text-sm font-black font-mono text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-lg border border-indigo-200">
+                        ALC-101
+                    </span>
+                </div>
+            </div>
+
+            <!-- HERO GAMIFIED STATS -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+                <!-- Relative Percentage Progress Ring -->
+                <div class="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm flex flex-col justify-between">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs font-bold text-slate-500">المستوى النسبي للمجموعة</span>
+                        <span id="tierBadge" class="text-[10px] font-black px-2.5 py-1 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200">
+                            متفوق - شعلة الخيميائي 🥇
+                        </span>
+                    </div>
+
+                    <div class="my-4 flex items-center justify-center relative">
+                        <svg class="w-32 h-32 transform -rotate-90">
+                            <circle cx="64" cy="64" r="52" stroke="#f1f5f9" stroke-width="10" fill="transparent" />
+                            <circle id="progressCircle" cx="64" cy="64" r="52" stroke="#10b981" stroke-width="10" stroke-dasharray="326.72" stroke-dashoffset="32" stroke-linecap="round" fill="transparent" />
+                        </svg>
+                        <div class="absolute inset-0 flex flex-col items-center justify-center text-center">
+                            <span id="percentageText" class="text-2xl font-black text-slate-900">90%</span>
+                            <span class="text-[10px] font-bold text-slate-400">مقارنة بالأول</span>
+                        </div>
+                    </div>
+
+                    <div class="text-center pt-2 border-t border-slate-100">
+                        <p class="text-xs font-bold text-slate-500">
+                            حُسبت بالنسبة للمركز الأول في المجموعات
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Total Earned Points -->
+                <div class="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm flex flex-col justify-between">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs font-bold text-slate-500">مجموع النقاط المحققة</span>
+                        <div class="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                            <i class="fa-solid fa-bolt text-indigo-600"></i>
+                        </div>
+                    </div>
+
+                    <div class="my-2 space-y-1">
+                        <div class="flex items-baseline gap-1">
+                            <span id="earnedPointsText" class="text-4xl font-black text-indigo-600">187</span>
+                            <span id="maxGroupPointsText" class="text-sm font-bold text-slate-400">/ 207 نقطة</span>
+                        </div>
+                        <p class="text-xs font-bold text-slate-500">
+                            إجمالي درجات الواجب، التسميع، والاختبارات
+                        </p>
+                    </div>
+
+                    <div class="space-y-1.5 pt-4 border-t border-slate-100">
+                        <div class="flex justify-between text-xs font-bold">
+                            <span class="text-slate-500">التقدم الشهر الحالي</span>
+                            <span id="percentageSmallText" class="text-indigo-600 font-black">90%</span>
+                        </div>
+                        <div class="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                            <div id="progressBar" class="bg-indigo-600 h-full rounded-full transition-all duration-500" style="width: 90%;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Group Rank & Attendance -->
+                <div class="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="text-xs font-bold text-slate-500">الترتيب والحضور</span>
+                            <div class="p-2 bg-amber-50 text-amber-600 rounded-xl">
+                                <i class="fa-solid fa-trophy"></i>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-200/80 mb-4">
+                            <div id="rankMedalBox" class="w-10 h-10 rounded-xl bg-amber-400 text-amber-950 font-black text-lg flex items-center justify-center shadow-sm">
+                                🥇
+                            </div>
+                            <div>
+                                <span class="text-xs font-bold text-slate-400 block">ترتيبك في المجموعة</span>
+                                <span id="rankText" class="text-sm font-black text-slate-900">المركز 1 من بين 4 طلاب</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pt-3 border-t border-slate-100 flex items-center justify-between">
+                        <div>
+                            <span class="text-xs font-bold text-slate-400 block">نسبة الحضور</span>
+                            <span id="attendanceRateText" class="text-base font-black text-emerald-600">100%</span>
+                        </div>
+                        <div class="flex gap-1.5 text-xs font-bold">
+                            <span id="attendedCountBadge" class="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200">4 حضر</span>
+                            <span id="absentCountBadge" class="hidden px-2 py-1 rounded-lg bg-rose-50 text-rose-700 border border-rose-200">0 غاب</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- LESSON HISTORY -->
+            <div class="space-y-4 pt-2">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="text-lg font-black text-slate-900 flex items-center gap-2">
+                            <i class="fa-solid fa-book-open text-indigo-600"></i>
+                            سجل دروس وتقييمات الشهر
+                        </h3>
+                        <p class="text-xs font-bold text-slate-500">
+                            عرض تفصيلي لكل درس مع درجات التسميع والواجب والاختبارات
+                        </p>
+                    </div>
+                </div>
+
+                <div id="lessonCardsContainer" class="grid grid-cols-1 gap-4">
+                    <!-- Dynamic Lesson Cards Injected Here -->
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- SCRIPT & DATA ENGINE -->
+    <script>
+        // MOCK DATABASE & DATA ENGINE
+        const MOCK_SETTINGS = {
+            active_month: 'مارس 2026'
+        };
+
+        const MOCK_STUDENTS = [
+            { student_code: 'ALC-101', name: 'أحمد علي محمود', group_name: 'مجموعة الخيميائي - السبت والثلثاء 4 مساءً', avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80' },
+            { student_code: 'ALC-102', name: 'مريم محمد السعيد', group_name: 'مجموعة الخيميائي - السبت والثلثاء 4 مساءً', avatar_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80' },
+            { student_code: 'ALC-103', name: 'زياد محمود حسن', group_name: 'مجموعة الخيميائي - السبت والثلثاء 4 مساءً', avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80' }
+        ];
+
+        const MOCK_RECORDS = [
+            { id: '1', student_code: 'ALC-101', lesson_number: 1, lesson_title: 'الكيمياء العضوية - الهيدروكربونات', lesson_date: '03 مارس 2026', lesson_month: 'مارس 2026', attendance: 'حضر', homework_degree: 10, recitation_degree: 10, exam_degree: 20, comprehensive_exam_degree: 48 },
+            { id: '2', student_code: 'ALC-101', lesson_number: 2, lesson_title: 'الألكانات والألكينات وطرق التحضير', lesson_date: '07 مارس 2026', lesson_month: 'مارس 2026', attendance: 'حضر', homework_degree: 10, recitation_degree: 9, exam_degree: 19, comprehensive_exam_degree: 0 },
+            { id: '3', student_code: 'ALC-101', lesson_number: 3, lesson_title: 'التفاعلات العضوية والتسمية الشائعة', lesson_date: '10 مارس 2026', lesson_month: 'مارس 2026', attendance: 'حضر', homework_degree: 10, recitation_degree: 10, exam_degree: 20, comprehensive_exam_degree: 0 },
+            { id: '4', student_code: 'ALC-101', lesson_number: 4, lesson_title: 'اختبار شامل على الباب الرابع والخامس', lesson_date: '14 مارس 2026', lesson_month: 'مارس 2026', attendance: 'حضر', homework_degree: 10, recitation_degree: 10, exam_degree: 20, comprehensive_exam_degree: 50 },
+
+            { id: '5', student_code: 'ALC-102', lesson_number: 1, lesson_title: 'الكيمياء العضوية - الهيدروكربونات', lesson_date: '03 مارس 2026', lesson_month: 'مارس 2026', attendance: 'حضر', homework_degree: 9, recitation_degree: 9, exam_degree: 18, comprehensive_exam_degree: 44 },
+            { id: '6', student_code: 'ALC-102', lesson_number: 2, lesson_title: 'الألكانات والألكينات وطرق التحضير', lesson_date: '07 مارس 2026', lesson_month: 'مارس 2026', attendance: 'حضر', homework_degree: 10, recitation_degree: 10, exam_degree: 18, comprehensive_exam_degree: 0 },
+
+            { id: '7', student_code: 'ALC-103', lesson_number: 1, lesson_title: 'الكيمياء العضوية - الهيدروكربونات', lesson_date: '03 مارس 2026', lesson_month: 'مارس 2026', attendance: 'حضر', homework_degree: 8, recitation_degree: 7, exam_degree: 15, comprehensive_exam_degree: 35 },
+            { id: '8', student_code: 'ALC-103', lesson_number: 2, lesson_title: 'الألكانات والألكينات وطرق التحضير', lesson_date: '07 مارس 2026', lesson_month: 'مارس 2026', attendance: 'غاب', homework_degree: 0, recitation_degree: 0, exam_degree: 0, comprehensive_exam_degree: 0 }
+        ];
+
+        let currentStudentCode = null;
+        let selectedMonth = MOCK_SETTINGS.active_month;
+
+        function quickLogin(code) {
+            document.getElementById('studentCodeInput').value = code;
+            handleLogin();
+        }
+
+        function handleLogin() {
+            const code = document.getElementById('studentCodeInput').value.trim();
+            const student = MOCK_STUDENTS.find(s => s.student_code.toLowerCase() === code.toLowerCase());
+            
+            if (!student) {
+                document.getElementById('loginErrorText').innerText = 'كود الطالب غير صحيح! حاول تجربة ALC-101';
+                document.getElementById('loginError').classList.remove('hidden');
+                return;
+            }
+
+            document.getElementById('loginError').classList.add('hidden');
+            currentStudentCode = student.student_code;
+            document.getElementById('loginScreen').classList.add('hidden');
+            document.getElementById('dashboardScreen').classList.remove('hidden');
+
+            renderDashboard();
+        }
+
+        function handleLogout() {
+            currentStudentCode = null;
+            document.getElementById('dashboardScreen').classList.add('hidden');
+            document.getElementById('loginScreen').classList.remove('hidden');
+        }
+
+        function changeMonth(m) {
+            selectedMonth = m;
+            renderDashboard();
+        }
+
+        function renderDashboard() {
+            const student = MOCK_STUDENTS.find(s => s.student_code === currentStudentCode);
+            if (!student) return;
+
+            // Update Header
+            document.getElementById('studentAvatar').src = student.avatar_url;
+            document.getElementById('studentNameHeader').innerText = student.name;
+            document.getElementById('studentGroupHeader').innerText = student.group_name;
+            document.getElementById('studentCodeBadge').innerText = student.student_code;
+            document.getElementById('activeMonthDisplay').innerHTML = `${selectedMonth} <span class="bg-emerald-100 text-emerald-700 text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-300">نشط الآن</span>`;
+
+            // Calculate Scores
+            const studentRecords = MOCK_RECORDS.filter(r => r.student_code === currentStudentCode && r.lesson_month === selectedMonth);
+            
+            let totalEarned = 0;
+            let attendedCount = 0;
+            let absentCount = 0;
+
+            studentRecords.forEach(r => {
+                if (r.attendance === 'حضر') {
+                    attendedCount++;
+                    totalEarned += (r.homework_degree || 0) + (r.recitation_degree || 0) + (r.exam_degree || 0) + (r.comprehensive_exam_degree || 0);
+                } else {
+                    absentCount++;
+                }
+            });
+
+            // Group Top Score Calculation
+            let groupMax = 207; // Top student total e.g. 207
+            let percentage = Math.min(100, Math.round((totalEarned / groupMax) * 100));
+
+            // Update UI elements
+            document.getElementById('percentageText').innerText = percentage + '%';
+            document.getElementById('percentageSmallText').innerText = percentage + '%';
+            document.getElementById('progressBar').style.width = percentage + '%';
+            document.getElementById('earnedPointsText').innerText = totalEarned;
+            document.getElementById('maxGroupPointsText').innerText = `/ ${groupMax} نقطة`;
+
+            const totalLessons = studentRecords.length || 1;
+            const attendanceRate = Math.round((attendedCount / totalLessons) * 100);
+            document.getElementById('attendanceRateText').innerText = attendanceRate + '%';
+            document.getElementById('attendedCountBadge').innerText = `${attendedCount} حضر`;
+            
+            if (absentCount > 0) {
+                document.getElementById('absentCountBadge').innerText = `${absentCount} غاب`;
+                document.getElementById('absentCountBadge').classList.remove('hidden');
+            } else {
+                document.getElementById('absentCountBadge').classList.add('hidden');
+            }
+
+            // Circle dash offset
+            const offset = 326.72 - (326.72 * percentage) / 100;
+            document.getElementById('progressCircle').setAttribute('stroke-dashoffset', offset);
+
+            // Render Lesson Cards
+            const container = document.getElementById('lessonCardsContainer');
+            container.innerHTML = '';
+
+            if (studentRecords.length === 0) {
+                container.innerHTML = `<div class="text-center py-8 bg-white rounded-3xl border border-slate-200"><p class="text-xs font-bold text-slate-400">لا توجد تقييمات لهذا الشهر</p></div>`;
+                return;
+            }
+
+            studentRecords.forEach(rec => {
+                const isAbsent = rec.attendance === 'غاب';
+                const cardHtml = `
+                    <div class="bg-white rounded-3xl p-5 border shadow-sm ${isAbsent ? 'border-rose-200 bg-rose-50/20' : 'border-slate-200/80'}">
+                        <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-2xl flex items-center justify-center font-black text-sm ${isAbsent ? 'bg-rose-100 text-rose-700' : 'bg-indigo-600 text-white'}">
+                                    ${rec.lesson_number}
+                                </div>
+                                <div>
+                                    <h4 class="text-base font-black text-slate-900">${rec.lesson_title}</h4>
+                                    <span class="text-xs font-bold text-slate-400">${rec.lesson_date}</span>
+                                </div>
+                            </div>
+                            <span class="px-3 py-1 rounded-full text-xs font-black ${isAbsent ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}">
+                                ${isAbsent ? 'غاب (درجات صفر)' : 'حضر الدرس'}
+                            </span>
+                        </div>
+
+                        <div class="pt-4">
+                            ${isAbsent ? `
+                                <div class="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold rounded-2xl">
+                                    ⚠️ تم تسجيل غياب الطالب في هذا الدرس، وبالتالي أُلغيت درجات الواجب والتسميع والاختبار.
+                                </div>
+                            ` : `
+                                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                    <div class="p-3 bg-slate-50 rounded-2xl border text-center">
+                                        <span class="text-[10px] text-slate-400 block">📝 الواجب</span>
+                                        <span class="text-lg font-black">${rec.homework_degree} / 10</span>
+                                    </div>
+                                    <div class="p-3 bg-slate-50 rounded-2xl border text-center">
+                                        <span class="text-[10px] text-slate-400 block">🗣️ التسميع</span>
+                                        <span class="text-lg font-black">${rec.recitation_degree} / 10</span>
+                                    </div>
+                                    <div class="p-3 bg-slate-50 rounded-2xl border text-center">
+                                        <span class="text-[10px] text-slate-400 block">📊 الاختبار</span>
+                                        <span class="text-lg font-black">${rec.exam_degree} / 20</span>
+                                    </div>
+                                    <div class="p-3 bg-indigo-50 rounded-2xl border text-center">
+                                        <span class="text-[10px] text-indigo-700 block">🏆 الشامل</span>
+                                        <span class="text-lg font-black text-indigo-900">${rec.comprehensive_exam_degree || '-'} / 50</span>
+                                    </div>
+                                </div>
+                            `}
+                        </div>
+                    </div>
+                `;
+                container.innerHTML += cardHtml;
+            });
+        }
+    </script>
+</body>
+</html>

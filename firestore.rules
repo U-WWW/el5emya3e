@@ -56,5 +56,42 @@ service cloud.firestore {
     match /settings/{settingId}/{allPaths=**} {
       allow read, write: if true;
     }
+
+    // Center groups
+    match /center_groups/{groupId} {
+      allow read, write: if true;
+    }
+    match /center_groups/{groupId}/{allPaths=**} {
+      allow read, write: if true;
+    }
+
+    // Center records
+    match /center_records/{recordId} {
+      allow read, write: if true;
+    }
+    match /center_records/{recordId}/{allPaths=**} {
+      allow read, write: if true;
+    }
+
+    // Center evaluations
+    match /center_evaluations/{evalId} {
+      allow read, write: if true;
+    }
+    match /center_evaluations/{evalId}/{allPaths=**} {
+      allow read, write: if true;
+    }
+
+    // Alchemiya evaluations
+    match /alchemiya_evaluations/{evalId} {
+      allow read, write: if true;
+    }
+    match /alchemiya_evaluations/{evalId}/{allPaths=**} {
+      allow read, write: if true;
+    }
+
+    // Catch-all for any other collections
+    match /{document=**} {
+      allow read, write: if true;
+    }
   }
 }

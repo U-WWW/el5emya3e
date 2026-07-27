@@ -56,6 +56,7 @@ import QRCode from 'qrcode';
 import CryptoJS from 'crypto-js';
 import VideoPlayerModal from './VideoPlayerModal';
 import EducationalGames from './EducationalGames';
+import AlchemiyaStudentDashboard from './AlchemiyaStudentDashboard';
 
 const SECRET_KEY = "JamalAcademy_Secret_2026";
 
@@ -175,12 +176,13 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
   const [selectedAvatar, setSelectedAvatar] = useState<string>('spiderman');
 
   // App Tabs
-  const [activeTab, setActiveTab] = useState<'home' | 'missions' | 'lectures' | 'friday' | 'profile' | 'community' | 'games'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'alchemiya' | 'missions' | 'lectures' | 'friday' | 'profile' | 'community' | 'games'>('home');
 
   // Real data state
   const [quizzes, setQuizzes] = useState<any[]>([]);
   const [videos, setVideos] = useState<any[]>([]);
   const [studentResults, setStudentResults] = useState<any[]>([]);
+  const [centerGroups, setCenterGroups] = useState<any[]>([]);
   
   // Active Exam state
   const [activeQuiz, setActiveQuiz] = useState<any>(null);
@@ -200,6 +202,19 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
       setNowTimestamp(Date.now());
     }, 1000);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    async function fetchCenterGroups() {
+      try {
+        const snap = await getDocs(collection(db, 'center_groups'));
+        const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setCenterGroups(list);
+      } catch (e) {
+        console.error("Error loading center groups for registration:", e);
+      }
+    }
+    fetchCenterGroups();
   }, []);
 
   // Video modal player state
@@ -315,7 +330,45 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
   const [communityMessages, setCommunityMessages] = useState<any[]>([]);
   const [communityInput, setCommunityInput] = useState('');
   const [isSendingCommunityMessage, setIsSendingCommunityMessage] = useState(false);
+  const [isChatClosed, setIsChatClosed] = useState(false);
   const communityEndRef = useRef<HTMLDivElement | null>(null);
+
+  // Subscribe to real-time chat settings (open / closed) for student's class
+  useEffect(() => {
+    if (!student?.className) return;
+    const docRef = doc(db, 'chat_settings', student.className);
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setIsChatClosed(!!docSnap.data()?.is_closed);
+      } else {
+        setIsChatClosed(false);
+      }
+    });
+    return () => unsubscribe();
+  }, [student?.className]);
+
+  // Subscribe to real-time student account status (is_banned, is_chat_banned)
+  useEffect(() => {
+    if (!student?.code) return;
+    const q = query(collection(db, 'students'), where('code', '==', student.code));
+    const unsubscribe = onSnapshot(q, (snap) => {
+      if (!snap.empty) {
+        const data = snap.docs[0].data();
+        if (data.is_banned) {
+          setStudent(null);
+          localStorage.removeItem('jamal_student');
+          alert('🚨 تم حظر حسابك بالكامل من المنصة بقرار من الأستاذ الخيميائي.');
+        } else {
+          setStudent(prev => prev ? { 
+            ...prev, 
+            is_chat_banned: !!data.is_chat_banned,
+            is_banned: !!data.is_banned
+          } : null);
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, [student?.code]);
 
   // Subscribe to real-time community chat for student's grade
   useEffect(() => {
@@ -427,6 +480,16 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
   const handleSendCommunityMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!communityInput.trim() || isSendingCommunityMessage) return;
+
+    if (isChatClosed) {
+      alert('🔒 الشات مغلق حالياً بقرار من الأستاذ الخيميائي.');
+      return;
+    }
+
+    if (student?.is_chat_banned) {
+      alert('🚨 أنت محظور من إرسال الرسائل في الشات بقرار من الأستاذ الخيميائي.');
+      return;
+    }
 
     const rawText = communityInput.trim();
     setCommunityInput('');
@@ -1228,23 +1291,15 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
                       required
                       className="w-full bg-stone-900 border border-stone-700 focus:border-cyan-400 text-stone-100 rounded-xl p-4 font-bold outline-none transition cursor-pointer appearance-none text-right"
                       value={loginForm.className}
-                      onChange={e => setLoginForm(prev => ({ ...prev, className: e.target.value }))}
+                      onChange={e => setLoginForm(prev => ({ ...prev, className: e.target.value, groupName: '' }))}
                     >
-                      <option value="" disabled className="text-stone-500">اختر الصف...</option>
-                      <optgroup label="المرحلة الابتدائية" className="text-stone-900 bg-white">
-                        <option value="الصف الأول الابتدائي">الصف الأول الابتدائي</option>
-                        <option value="الصف الثاني الابتدائي">الصف الثاني الابتدائي</option>
-                        <option value="الصف الثالث الابتدائي">الصف الثالث الابتدائي</option>
-                        <option value="الصف الرابع الابتدائي">الصف الرابع الابتدائي</option>
-                        <option value="الصف الخامس الابتدائي">الصف الخامس الابتدائي</option>
-                        <option value="الصف السادس الابتدائي">الصف السادس الابتدائي</option>
-                      </optgroup>
-                      <optgroup label="المرحلة الإعدادية" className="text-stone-900 bg-white">
+                      <option value="" disabled className="text-stone-500">اختر الصف الدراسي...</option>
+                      <optgroup label="المرحلة الإعدادية" className="text-stone-900 bg-white font-bold">
                         <option value="الصف الأول الإعدادي">الصف الأول الإعدادي</option>
                         <option value="الصف الثاني الإعدادي">الصف الثاني الإعدادي</option>
                         <option value="الصف الثالث الإعدادي">الصف الثالث الإعدادي</option>
                       </optgroup>
-                      <optgroup label="المرحلة الثانوية" className="text-stone-900 bg-white">
+                      <optgroup label="المرحلة الثانوية" className="text-stone-900 bg-white font-bold">
                         <option value="الصف الأول الثانوي">الصف الأول الثانوي</option>
                         <option value="الصف الثاني الثانوي">الصف الثاني الثانوي</option>
                         <option value="الصف الثالث الثانوي">الصف الثالث الثانوي</option>
@@ -1256,7 +1311,7 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
 
                 <div>
                   <label className="block text-xs font-black text-cyan-400 uppercase tracking-wider mb-2">
-                    Group / Day (المجموعة)
+                    Group (المجموعة والموعد)
                   </label>
                   <div className="relative">
                     <select
@@ -1265,14 +1320,18 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
                       value={loginForm.groupName}
                       onChange={e => setLoginForm(prev => ({ ...prev, groupName: e.target.value }))}
                     >
-                      <option value="" disabled className="text-stone-500">اختر اليوم...</option>
-                      <option value="السبت" className="text-stone-900 bg-white">السبت</option>
-                      <option value="الأحد" className="text-stone-900 bg-white">الأحد</option>
-                      <option value="الإثنين" className="text-stone-900 bg-white">الإثنين</option>
-                      <option value="الثلاثاء" className="text-stone-900 bg-white">الثلاثاء</option>
-                      <option value="الأربعاء" className="text-stone-900 bg-white">الأربعاء</option>
-                      <option value="الخميس" className="text-stone-900 bg-white">الخميس</option>
-                      <option value="الجمعة" className="text-stone-900 bg-white">الجمعة</option>
+                      <option value="" disabled className="text-stone-500">اختر المجموعة الخاصة بك...</option>
+                      {centerGroups
+                        .filter(g => !loginForm.className || g.class_name === loginForm.className)
+                        .map(g => (
+                          <option key={g.id} value={g.group_name} className="text-stone-900 bg-white font-bold">
+                            {g.group_name} ({g.day_of_week})
+                          </option>
+                        ))}
+                      <option value="مجموعة السبت والثلثاء" className="text-stone-900 bg-white font-bold">مجموعة السبت والثلثاء</option>
+                      <option value="مجموعة الأحد والأربعاء" className="text-stone-900 bg-white font-bold">مجموعة الأحد والأربعاء</option>
+                      <option value="مجموعة الإثنين والخميس" className="text-stone-900 bg-white font-bold">مجموعة الإثنين والخميس</option>
+                      <option value="مجموعة الجمعة" className="text-stone-900 bg-white font-bold">مجموعة الجمعة</option>
                     </select>
                     <Users className="absolute left-4 top-4 text-stone-500 w-5 h-5" />
                   </div>
@@ -1482,6 +1541,7 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
             <nav className="hidden lg:flex items-center gap-2 bg-slate-900/60 p-1.5 rounded-2xl border border-cyan-500/20">
               {[
                 { id: 'home', label: 'الرئيسية', icon: Home },
+                { id: 'alchemiya', label: 'تقييم السنتر', icon: GraduationCap },
                 { id: 'missions', label: 'المهام والاختبارات', icon: BookOpen },
                 { id: 'lectures', label: 'المحاضرات', icon: Play },
                 { id: 'games', label: 'الألعاب التعليمية', icon: Sparkles },
@@ -1527,13 +1587,13 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
 
       {/* Mobile Navigation (Bottom) */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-slate-950/95 backdrop-blur-xl border-t border-cyan-900/50 pb-safe">
-        <div className="flex justify-around items-center p-2">
+        <div className="flex justify-around items-center p-2 overflow-x-auto">
           {[
             { id: 'home', label: 'الرئيسية', icon: Home },
+            { id: 'alchemiya', label: 'تقييم السنتر', icon: GraduationCap },
             { id: 'missions', label: 'مهام', icon: BookOpen },
             { id: 'lectures', label: 'محاضرات', icon: Play },
             { id: 'games', label: 'ألعاب', icon: Sparkles },
-            { id: 'community', label: 'مجتمع', icon: Users },
             { id: 'profile', label: 'ملفي', icon: User }
           ].map(tab => {
             const Icon = tab.icon;
@@ -1931,6 +1991,42 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
                       </motion.div>
                     </div>
                   </div>
+
+                  {/* Alchemiya Evaluation Quick Access Card */}
+                  <motion.div 
+                    whileHover={{ scale: 1.01 }}
+                    onClick={() => setActiveTab('alchemiya')}
+                    className="cursor-pointer bg-gradient-to-r from-cyan-950/80 via-slate-900 to-emerald-950/80 border-2 border-cyan-500/50 hover:border-cyan-400 p-6 md:p-8 rounded-3xl relative overflow-hidden shadow-[0_0_30px_rgba(6,182,212,0.25)] transition-all group"
+                  >
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none group-hover:bg-cyan-500/20 transition-all"></div>
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-6 relative z-10 text-right">
+                      <div className="flex items-center gap-5">
+                        <div className="p-4 bg-cyan-500/20 border border-cyan-400/40 rounded-2xl text-cyan-300 shadow-inner group-hover:scale-110 transition-transform">
+                          <GraduationCap className="w-10 h-10" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-black bg-cyan-500 text-slate-950 px-3 py-0.5 rounded-full uppercase tracking-wider">
+                              جديد - نظام التقييم
+                            </span>
+                            <span className="text-xs font-bold text-cyan-400 animate-pulse">
+                              واجهة الطالب (الخيميائي) 🧪
+                            </span>
+                          </div>
+                          <h3 className="text-2xl font-black text-white">
+                            تقارير درجات الطالب والنسب المئوية والغياب
+                          </h3>
+                          <p className="text-sm font-medium text-slate-300 mt-1">
+                            تتبع الأداء الشهرية والمهام الإضافية والنقاط والمعدل مع إعادة حساب التقييمات تلقائياً
+                          </p>
+                        </div>
+                      </div>
+
+                      <button className="whitespace-nowrap px-6 py-3.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black rounded-xl transition shadow-lg flex items-center gap-2 text-base">
+                        افتح الواجهة الآن 👈
+                      </button>
+                    </div>
+                  </motion.div>
 
                   {/* Majestic Stats Grid */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
@@ -2386,8 +2482,10 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
                   <div className="bg-stone-950/40 border-b border-gray-950 p-4 md:p-5 flex flex-col md:flex-row justify-between items-center gap-3">
                     <div className="text-right w-full md:w-auto">
                       <div className="flex items-center gap-2 justify-end">
-                        <span className="inline-flex h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-                        <span className="text-xs font-black text-green-400 tracking-wider">LIVE CHAT ONLINE (شات تفاعلي مباشر)</span>
+                        <span className={`inline-flex h-2 w-2 rounded-full ${isChatClosed ? 'bg-red-500' : 'bg-green-500 animate-pulse'}`} />
+                        <span className={`text-xs font-black tracking-wider ${isChatClosed ? 'text-red-400' : 'text-green-400'}`}>
+                          {isChatClosed ? '🔒 الشات مغلق من قِبل الإدارة' : 'LIVE CHAT ONLINE (شات تفاعلي مباشر)'}
+                        </span>
                       </div>
                       <h4 className="font-sans font-black text-stone-100 text-xl md:text-2xl mt-1">
                         مجتمع {student?.className} 🛡️
@@ -2404,6 +2502,21 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
                     </div>
                   </div>
 
+                  {/* Status Banner when Closed or Banned */}
+                  {isChatClosed && (
+                    <div className="bg-red-950/80 border-b border-red-800 p-3 text-center text-red-200 text-xs font-black flex items-center justify-center gap-2">
+                      <Lock className="w-4 h-4 text-red-400" />
+                      <span>🔒 الشات مغلق حالياً بقرار من الأستاذ الخيميائي. يمكنك قراءة الرسائل السابقة فقط.</span>
+                    </div>
+                  )}
+
+                  {!isChatClosed && student?.is_chat_banned && (
+                    <div className="bg-amber-950/90 border-b border-amber-800 p-3 text-center text-amber-200 text-xs font-black flex items-center justify-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-400" />
+                      <span>🚨 تم حظر حسابك من إرسال الرسائل في الشات بقرار إداري.</span>
+                    </div>
+                  )}
+
                   {/* Message stream */}
                   <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 bg-slate-950/20">
                     {communityMessages.length === 0 ? (
@@ -2419,33 +2532,42 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
                     ) : (
                       communityMessages.map((msg, index) => {
                         const isMe = msg.student_code === student?.code;
-                        const avatarEmoji = 
-                          msg.avatar === 'spiderman' ? '🦁' :
-                          msg.avatar === 'ironman' ? '👑' :
-                          msg.avatar === 'captainamerica' ? '🛡️' :
-                          msg.avatar === 'thor' ? '⚔️' :
-                          msg.avatar === 'blackwidow' ? '💅' :
-                          msg.avatar === 'hulk' ? '💪' :
-                          msg.avatar === 'doctorstrange' ? '🔮' : '👤';
+                        const isAdminMsg = msg.is_admin || msg.student_code === 'ADMIN';
 
-                        const bubbleBg = isMe 
-                          ? 'bg-amber-600 text-stone-100 border-amber-600 shadow-[2px_2px_0px_#000]' 
-                          : 'bg-white/5 text-gray-100 border-gray-800 shadow-[2px_2px_0px_#000]';
+                        const avatarEmoji = isAdminMsg 
+                          ? '👑'
+                          : msg.avatar === 'spiderman' ? '🦁' :
+                            msg.avatar === 'ironman' ? '👑' :
+                            msg.avatar === 'captainamerica' ? '🛡️' :
+                            msg.avatar === 'thor' ? '⚔️' :
+                            msg.avatar === 'blackwidow' ? '💅' :
+                            msg.avatar === 'hulk' ? '💪' :
+                            msg.avatar === 'doctorstrange' ? '🔮' : '👤';
+
+                        const bubbleBg = isAdminMsg
+                          ? 'bg-gradient-to-r from-amber-950 via-yellow-950 to-stone-900 text-amber-200 border-amber-500/80 shadow-[0_0_15px_rgba(245,158,11,0.2)]'
+                          : isMe 
+                            ? 'bg-amber-600 text-stone-100 border-amber-600 shadow-[2px_2px_0px_#000]' 
+                            : 'bg-white/5 text-gray-100 border-gray-800 shadow-[2px_2px_0px_#000]';
 
                         return (
                           <div
                             key={msg.id || index}
-                            className={`flex items-start gap-2.5 max-w-[85%] md:max-w-[70%] ${isMe ? 'mr-auto flex-row-reverse' : 'ml-auto'}`}
+                            className={`flex items-start gap-2.5 max-w-[85%] md:max-w-[70%] ${isAdminMsg ? 'mr-auto flex-row-reverse w-full' : isMe ? 'mr-auto flex-row-reverse' : 'ml-auto'}`}
                           >
-                            <div className="h-10 w-10 rounded-xl bg-stone-950 border-2 border-gray-800 flex items-center justify-center text-xl shadow-md shrink-0">
+                            <div className={`h-10 w-10 rounded-xl border-2 flex items-center justify-center text-xl shadow-md shrink-0 ${
+                              isAdminMsg ? 'bg-amber-950 border-amber-400' : 'bg-stone-950 border-gray-800'
+                            }`}>
                               {avatarEmoji}
                             </div>
-                            <div className="space-y-1 text-right">
+                            <div className="space-y-1 text-right flex-1">
                               <div className="flex items-center gap-2 justify-end">
                                 <span className="text-[10px] text-gray-500 font-bold">
                                   {msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : ''}
                                 </span>
-                                <span className={`text-xs font-black ${isMe ? 'text-rose-400' : 'text-amber-500'}`}>
+                                <span className={`text-xs font-black flex items-center gap-1 ${
+                                  isAdminMsg ? 'text-amber-400 bg-amber-950/80 border border-amber-500/50 px-2 py-0.5 rounded-md' : isMe ? 'text-rose-400' : 'text-amber-500'
+                                }`}>
                                   {msg.student_name}
                                 </span>
                               </div>
@@ -2464,15 +2586,21 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
                   <form onSubmit={handleSendCommunityMessage} className="p-4 bg-stone-950 border-t border-gray-900 flex gap-2">
                     <input
                       type="text"
-                      className="flex-1 bg-white/5 border-2 border-gray-800 focus:border-amber-600 text-stone-100 font-bold p-3 rounded-xl outline-none transition text-right placeholder-gray-500 text-sm md:text-base"
-                      placeholder="اكتب رسالة محترمة ومفيدة لزملائك في الدفعة..."
+                      className="flex-1 bg-white/5 border-2 border-gray-800 focus:border-amber-600 text-stone-100 font-bold p-3 rounded-xl outline-none transition text-right placeholder-gray-500 text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
+                      placeholder={
+                        isChatClosed 
+                          ? '🔒 الشات مغلق حالياً بقرار من الأستاذ الخيميائي...' 
+                          : student?.is_chat_banned
+                          ? '🚨 تم حظرك من كتابة الرسائل في الشات...'
+                          : 'اكتب رسالة محترمة ومفيدة لزملائك في الدفعة...'
+                      }
                       value={communityInput}
                       onChange={e => setCommunityInput(e.target.value)}
-                      disabled={isSendingCommunityMessage}
+                      disabled={isSendingCommunityMessage || isChatClosed || !!student?.is_chat_banned}
                     />
                     <button
                       type="submit"
-                      disabled={isSendingCommunityMessage || !communityInput.trim()}
+                      disabled={isSendingCommunityMessage || !communityInput.trim() || isChatClosed || !!student?.is_chat_banned}
                       className="bg-amber-600 hover:bg-amber-500 disabled:bg-gray-800 disabled:text-gray-500 p-3 rounded-xl text-stone-100 font-black transition flex items-center justify-center shadow-lg shrink-0"
                     >
                       {isSendingCommunityMessage ? (
@@ -2483,6 +2611,10 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
                     </button>
                   </form>
                 </div>
+              )}
+
+              {activeTab === 'alchemiya' && (
+                <AlchemiyaStudentDashboard currentStudent={student} />
               )}
 
               {activeTab === 'games' && (

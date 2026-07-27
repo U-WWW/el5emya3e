@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../lib/firebase';
 import { 
   collection, 
@@ -12,6 +12,7 @@ import {
   query, 
   where, 
   orderBy,
+  onSnapshot,
   writeBatch
 } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'motion/react';
@@ -42,6 +43,7 @@ import {
   Check,
   Database,
   MessageCircle,
+  MessageSquare,
   LogOut,
   Clock,
   BarChart3,
@@ -50,8 +52,18 @@ import {
   Image as ImageIcon,
   Upload,
   Save,
-  RotateCcw
+  RotateCcw,
+  GraduationCap,
+  Crown,
+  Lock,
+  Unlock,
+  Ban,
+  UserX,
+  Send,
+  ShieldAlert
 } from 'lucide-react';
+import AlchemiyaStudentDashboard from './AlchemiyaStudentDashboard';
+import AdminCenterEvaluations from './AdminCenterEvaluations';
 
 const SECRET_KEY = "JamalAcademy_Secret_2026";
 
@@ -66,7 +78,24 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [loginError, setLoginError] = useState(false);
 
   // Nav Tabs
-  const [activeTab, setActiveTab] = useState<'stats' | 'students' | 'videos' | 'quizzes' | 'results' | 'rankings' | 'scanner' | 'messages' | 'banner'>('stats');
+  const [activeTab, setActiveTab] = useState<'stats' | 'alchemiya' | 'students' | 'videos' | 'quizzes' | 'results' | 'rankings' | 'scanner' | 'messages' | 'banner' | 'community_chats'>('stats');
+
+  // Community Chats Management State
+  const [chatSelectedClass, setChatSelectedClass] = useState('الصف الأول الثانوي');
+  const [adminChatMessages, setAdminChatMessages] = useState<any[]>([]);
+  const [adminChatInput, setAdminChatInput] = useState('');
+  const [isChatClosedForSelectedClass, setIsChatClosedForSelectedClass] = useState(false);
+  const [isSendingAdminChat, setIsSendingAdminChat] = useState(false);
+  const [selectedStudentForAction, setSelectedStudentForAction] = useState<{
+    id?: string;
+    code: string;
+    name: string;
+    className: string;
+    is_chat_banned?: boolean;
+    is_banned?: boolean;
+    messageDocId?: string;
+  } | null>(null);
+  const adminChatEndRef = useRef<HTMLDivElement | null>(null);
 
   // Real Database state
   const [students, setStudents] = useState<any[]>([]);
@@ -81,6 +110,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [searchStudent, setSearchStudent] = useState('');
   const [filterClass, setFilterClass] = useState('all');
   const [filterGroup, setFilterGroup] = useState('all');
+  const [centerGroups, setCenterGroups] = useState<any[]>([]);
 
   // Scanner State
   const [scanResult, setScanResult] = useState<any>(null);
@@ -298,9 +328,11 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         password: editStudentData.password,
         phone: editStudentData.phone,
         class_name: editStudentData.class_name,
-        group_name: editStudentData.group_name
+        className: editStudentData.class_name,
+        group_name: editStudentData.group_name,
+        groupName: editStudentData.group_name
       });
-      alert("تم تحديث بيانات الطالب بنجاح!");
+      alert("تم تحديث بيانات الطالب والمجموعة بنجاح!");
       setEditingStudent(null);
       fetchAdminData();
     } catch (err) {
@@ -334,6 +366,11 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       const studentSnap = await getDocs(collection(db, 'students'));
       const sList = studentSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setStudents(sList);
+
+      // Fetch Center Groups
+      const groupSnap = await getDocs(collection(db, 'center_groups'));
+      const gList = groupSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setCenterGroups(gList);
 
       // 2. Fetch Quizzes
       const quizSnap = await getDocs(collection(db, 'quizzes'));
@@ -428,6 +465,161 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       console.error("Error loading admin datasets:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Real-time listener for community messages in Admin Dashboard
+  useEffect(() => {
+    if (!authorized || activeTab !== 'community_chats') return;
+
+    const q = query(
+      collection(db, 'grade_chats'),
+      where('class_name', '==', chatSelectedClass)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const msgs = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() as any }))
+        .sort((a, b) => a.timestamp_num - b.timestamp_num);
+      setAdminChatMessages(msgs);
+      setTimeout(() => {
+        adminChatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    });
+
+    return () => unsubscribe();
+  }, [authorized, activeTab, chatSelectedClass]);
+
+  // Real-time listener for chat settings (open/closed) in Admin Dashboard
+  useEffect(() => {
+    if (!authorized || activeTab !== 'community_chats') return;
+
+    const docRef = doc(db, 'chat_settings', chatSelectedClass);
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setIsChatClosedForSelectedClass(!!docSnap.data()?.is_closed);
+      } else {
+        setIsChatClosedForSelectedClass(false);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [authorized, activeTab, chatSelectedClass]);
+
+  const [isTogglingChatStatus, setIsTogglingChatStatus] = useState(false);
+  const [chatToastNotice, setChatToastNotice] = useState<string | null>(null);
+
+  // Toggle chat status open/closed for class
+  const handleToggleChatOpenClose = async () => {
+    if (isTogglingChatStatus) return;
+    const newClosedStatus = !isChatClosedForSelectedClass;
+    setIsTogglingChatStatus(true);
+    setChatToastNotice(null);
+
+    try {
+      await setDoc(doc(db, 'chat_settings', chatSelectedClass), {
+        is_closed: newClosedStatus,
+        updatedAt: new Date().toISOString(),
+        updatedBy: 'الأستاذ الخيميائي'
+      });
+      const msg = `تم ${newClosedStatus ? "إغلاق 🔒" : "فتح 🔓"} الشات بنجاح لصف (${chatSelectedClass})`;
+      setChatToastNotice(msg);
+      setTimeout(() => setChatToastNotice(null), 4000);
+    } catch (err) {
+      console.error("Error toggling chat status:", err);
+      setChatToastNotice("حدث خطأ أثناء تعديل حالة الشات.");
+      setTimeout(() => setChatToastNotice(null), 4000);
+    } finally {
+      setIsTogglingChatStatus(false);
+    }
+  };
+
+  // Send admin message to class chat
+  const handleSendAdminChatMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adminChatInput.trim() || isSendingAdminChat) return;
+
+    const text = adminChatInput.trim();
+    setAdminChatInput('');
+    setIsSendingAdminChat(true);
+
+    try {
+      await addDoc(collection(db, 'grade_chats'), {
+        class_name: chatSelectedClass,
+        student_code: 'ADMIN',
+        student_name: 'الأستاذ الخيميائي (القائد) 👑',
+        avatar: 'crown',
+        is_admin: true,
+        text,
+        timestamp_num: Date.now(),
+        createdAt: new Date().toISOString()
+      });
+    } catch (err) {
+      console.error("Error sending admin chat message:", err);
+      alert("حدث خطأ أثناء إرسال الرسالة.");
+    } finally {
+      setIsSendingAdminChat(false);
+    }
+  };
+
+  // Ban actions
+  const handleSetStudentBanType = async (type: 'chat' | 'platform' | 'unban') => {
+    if (!selectedStudentForAction) return;
+
+    const { code, name } = selectedStudentForAction;
+    try {
+      // Find student in students collection
+      const q = query(collection(db, 'students'), where('code', '==', code));
+      const snap = await getDocs(q);
+
+      if (snap.empty) {
+        setChatToastNotice("لم يتم العثور على سجل الطالب في قاعدة البيانات.");
+        setTimeout(() => setChatToastNotice(null), 4000);
+        return;
+      }
+
+      const studentDoc = snap.docs[0];
+
+      if (type === 'chat') {
+        await updateDoc(doc(db, 'students', studentDoc.id), {
+          is_chat_banned: true,
+          is_banned: false
+        });
+        setChatToastNotice(`تم حظر الطالب (${name}) من إرسال الرسائل في الشات فقط!`);
+      } else if (type === 'platform') {
+        await updateDoc(doc(db, 'students', studentDoc.id), {
+          is_banned: true,
+          is_chat_banned: true
+        });
+        setChatToastNotice(`تم حظر الطالب (${name}) بالكامل من المنصة!`);
+      } else if (type === 'unban') {
+        await updateDoc(doc(db, 'students', studentDoc.id), {
+          is_banned: false,
+          is_chat_banned: false
+        });
+        setChatToastNotice(`تم إلغاء كافة الحظورات عن الطالب (${name})!`);
+      }
+
+      setTimeout(() => setChatToastNotice(null), 4000);
+      setSelectedStudentForAction(null);
+      await fetchAdminData();
+    } catch (err) {
+      console.error("Error setting student ban:", err);
+      setChatToastNotice("حدث خطأ أثناء تنفيذ الإجراء.");
+      setTimeout(() => setChatToastNotice(null), 4000);
+    }
+  };
+
+  const handleDeleteChatMessageDoc = async (docId: string) => {
+    try {
+      await deleteDoc(doc(db, 'grade_chats', docId));
+      setChatToastNotice("تم حذف الرسالة بنجاح!");
+      setTimeout(() => setChatToastNotice(null), 4000);
+      if (selectedStudentForAction?.messageDocId === docId) {
+        setSelectedStudentForAction(null);
+      }
+    } catch (err) {
+      console.error("Error deleting chat message:", err);
     }
   };
 
@@ -875,6 +1067,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
           <h3 className="text-gray-500 font-black text-xs uppercase tracking-widest mb-6 border-b border-gray-800 pb-2">أقسام لوحة التحكم</h3>
           {[
             { id: 'stats', label: 'لوحة التحكم', icon: Shield },
+            { id: 'community_chats', label: 'شاتات المجتمعات 💬', icon: MessageSquare },
+            { id: 'alchemiya', label: 'تقييم طلاب السنتر', icon: GraduationCap },
             { id: 'banner', label: 'تعديل بنر الهوم', icon: ImageIcon },
             { id: 'scanner', label: 'مسح النتائج (QR)', icon: QrCode },
             { id: 'students', label: 'الطلاب المسجلين', icon: Users },
@@ -911,6 +1105,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         <div className="flex justify-start items-center h-20 px-4 gap-4 whitespace-nowrap min-w-max">
           {[
             { id: 'stats', label: 'لوحة التحكم', icon: Shield },
+            { id: 'community_chats', label: 'الشاتات', icon: MessageSquare },
+            { id: 'alchemiya', label: 'الخيميائي', icon: GraduationCap },
             { id: 'banner', label: 'البنر', icon: ImageIcon },
             { id: 'scanner', label: 'مسح النتائج (QR)', icon: QrCode },
             { id: 'students', label: 'الطلاب', icon: Users },
@@ -946,6 +1142,340 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
         {/* Content Tabs Switch */}
         <div>
+          {activeTab === 'community_chats' && (
+            <div className="space-y-6">
+              {/* Header Card */}
+              <div className="bg-stone-950/80 border border-gray-800 rounded-3xl p-6 md:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-2xl">
+                <div className="space-y-2 text-right">
+                  <span className="inline-flex items-center gap-1.5 bg-amber-950/80 border border-amber-500/50 text-amber-400 font-extrabold text-xs px-3 py-1 rounded-full">
+                    <Crown className="w-4 h-4 text-amber-400" /> غرف مجتمعات الصفوف والشاتات المباشرة
+                  </span>
+                  <h3 className="text-2xl md:text-3xl font-black text-stone-100 flex items-center gap-2">
+                    المحادثة المباشرة وإدارة الشاتات 💬
+                  </h3>
+                  <p className="text-sm font-bold text-gray-400 max-w-xl leading-relaxed">
+                    يمكنك كأدمن الدخول والمشاركة في شات أي صف، توجيه الطلاب، وحظر أي طالب (حظر من الشات فقط أو حظر من المنصة)، والتحكم بفتح أو إغلاق الشات عامة.
+                  </p>
+                </div>
+
+                {/* Class Selector & Open/Close Toggle Button */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto shrink-0">
+                  <select
+                    value={chatSelectedClass}
+                    onChange={(e) => setChatSelectedClass(e.target.value)}
+                    className="bg-stone-900 border-2 border-gray-700 text-stone-100 font-bold p-3.5 rounded-2xl outline-none focus:border-amber-500 transition text-right cursor-pointer"
+                  >
+                    <option value="الصف الأول الابتدائي">الصف الأول الابتدائي</option>
+                    <option value="الصف الثاني الابتدائي">الصف الثاني الابتدائي</option>
+                    <option value="الصف الثالث الابتدائي">الصف الثالث الابتدائي</option>
+                    <option value="الصف الرابع الابتدائي">الصف الرابع الابتدائي</option>
+                    <option value="الصف الخامس الابتدائي">الصف الخامس الابتدائي</option>
+                    <option value="الصف السادس الابتدائي">الصف السادس الابتدائي</option>
+                    <option value="الصف الأول الإعدادي">الصف الأول الإعدادي</option>
+                    <option value="الصف الثاني الإعدادي">الصف الثاني الإعدادي</option>
+                    <option value="الصف الثالث الإعدادي">الصف الثالث الإعدادي</option>
+                    <option value="الصف الأول الثانوي">الصف الأول الثانوي</option>
+                    <option value="الصف الثاني الثانوي">الصف الثاني الثانوي</option>
+                    <option value="الصف الثالث الثانوي">الصف الثالث الثانوي</option>
+                  </select>
+
+                  {/* Current Status Badge & Action Button */}
+                  <div className="flex flex-col items-end gap-2">
+                    <div className={`px-4 py-1.5 rounded-xl border text-xs font-black flex items-center gap-2 ${
+                      isChatClosedForSelectedClass
+                        ? 'bg-rose-950/90 border-rose-600 text-rose-300 animate-pulse'
+                        : 'bg-emerald-950/90 border-emerald-600 text-emerald-300'
+                    }`}>
+                      <span className={`w-2.5 h-2.5 rounded-full ${isChatClosedForSelectedClass ? 'bg-rose-500' : 'bg-emerald-500 animate-pulse'}`} />
+                      <span>الحالة الحالية: {isChatClosedForSelectedClass ? '🔒 الشات مَغْلَق الآن عن الطلاب' : '🟢 الشات مَفْتُوح الآن للطلاب'}</span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleToggleChatOpenClose}
+                      disabled={isTogglingChatStatus}
+                      className={`w-full sm:w-auto px-5 py-3 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition shadow-xl border-2 active:scale-95 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                        isChatClosedForSelectedClass
+                          ? 'bg-emerald-600 hover:bg-emerald-500 text-stone-100 border-emerald-400 shadow-emerald-950/50'
+                          : 'bg-rose-600 hover:bg-rose-500 text-stone-100 border-rose-400 shadow-rose-950/50'
+                      }`}
+                    >
+                      {isTogglingChatStatus ? (
+                        <>
+                          <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          <span>جاري التحديث...</span>
+                        </>
+                      ) : isChatClosedForSelectedClass ? (
+                        <>
+                          <Unlock className="w-5 h-5" />
+                          <span>اضغط هنا لـ (فتح الشات للطلاب) 🔓</span>
+                        </>
+                      ) : (
+                        <>
+                          <Lock className="w-5 h-5" />
+                          <span>اضغط هنا لـ (إغلاق الشات عن الطلاب) 🔒</span>
+                        </>
+                      )}
+                    </button>
+
+                    {chatToastNotice && (
+                      <div className="bg-amber-500/20 border border-amber-500 text-amber-300 font-black text-xs px-3 py-1.5 rounded-xl animate-fade-in text-center">
+                        {chatToastNotice}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Chat Container */}
+              <div className="bg-stone-900 border border-stone-800 shadow-2xl rounded-3xl flex flex-col h-[70vh] overflow-hidden">
+                {/* Chat Sub-Header */}
+                <div className="bg-stone-950 p-4 border-b border-gray-800 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2.5 rounded-2xl border ${
+                      isChatClosedForSelectedClass 
+                        ? 'bg-rose-950/60 border-rose-800 text-rose-400' 
+                        : 'bg-emerald-950/60 border-emerald-800 text-emerald-400'
+                    }`}>
+                      {isChatClosedForSelectedClass ? <Lock className="w-5 h-5" /> : <MessageSquare className="w-5 h-5" />}
+                    </div>
+                    <div className="text-right">
+                      <h4 className="text-stone-100 font-black text-base md:text-lg flex items-center gap-2">
+                        شات مجتمع: <span className="text-amber-400">{chatSelectedClass}</span>
+                      </h4>
+                      <p className="text-xs text-gray-400 font-bold mt-0.5">
+                        {isChatClosedForSelectedClass 
+                          ? '🔴 الشات مغلق حالياً عن الطلاب (يمكنك الكتابة بصفتك القائد)' 
+                          : '🟢 الشات مفتوح ومتاح للطلاب لإرسال الرسائل'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <span className="text-xs font-mono font-black text-stone-400 bg-white/5 border border-gray-800 px-3 py-1.5 rounded-xl">
+                    {adminChatMessages.length} رسالة
+                  </span>
+                </div>
+
+                {/* Messages List */}
+                <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 bg-slate-950/30">
+                  {adminChatMessages.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center space-y-3 p-6">
+                      <MessageCircle className="w-12 h-12 text-gray-600" />
+                      <h5 className="text-gray-400 font-black text-lg">لا توجد رسائل في شات {chatSelectedClass} حتى الآن</h5>
+                      <p className="text-xs text-gray-500 max-w-sm">
+                        قم بكتابة أول رسالة لتشجيع الطلاب أو توجيه تعليمات خاصة بالصف.
+                      </p>
+                    </div>
+                  ) : (
+                    adminChatMessages.map((msg) => {
+                      const isAdminMsg = msg.is_admin || msg.student_code === 'ADMIN';
+
+                      return (
+                        <div
+                          key={msg.id}
+                          className={`flex items-start gap-3 max-w-[90%] md:max-w-[75%] ${
+                            isAdminMsg ? 'mr-auto flex-row-reverse w-full' : 'ml-auto'
+                          }`}
+                        >
+                          <div className={`h-11 w-11 rounded-2xl border-2 flex items-center justify-center text-xl shadow-md shrink-0 ${
+                            isAdminMsg ? 'bg-amber-950 border-amber-400' : 'bg-stone-950 border-gray-800'
+                          }`}>
+                            {isAdminMsg ? '👑' : '👤'}
+                          </div>
+
+                          <div className="space-y-1 text-right flex-1">
+                            <div className="flex items-center gap-2 justify-end flex-wrap">
+                              <span className="text-[10px] text-gray-500 font-bold">
+                                {msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : ''}
+                              </span>
+
+                              <span className={`text-xs font-black px-2.5 py-0.5 rounded-lg border ${
+                                isAdminMsg 
+                                  ? 'text-amber-300 bg-amber-950/90 border-amber-500/50' 
+                                  : 'text-stone-200 bg-white/5 border-gray-800'
+                              }`}>
+                                {msg.student_name}
+                                {!isAdminMsg && <span className="text-[10px] font-mono text-gray-400 mr-1">({msg.student_code})</span>}
+                              </span>
+                            </div>
+
+                            <div className={`p-3.5 rounded-2xl text-sm leading-relaxed border relative group ${
+                              isAdminMsg
+                                ? 'bg-gradient-to-r from-amber-950 via-yellow-950 to-stone-900 text-amber-100 border-amber-500/80 shadow-[0_0_15px_rgba(245,158,11,0.2)]'
+                                : 'bg-stone-950/90 text-stone-100 border-gray-800'
+                            }`}>
+                              <p className="font-sans font-bold select-text whitespace-pre-wrap">{msg.text}</p>
+
+                              {/* Admin Action Buttons for non-admin messages */}
+                              {!isAdminMsg && (
+                                <div className="mt-3 pt-2 border-t border-gray-800/80 flex items-center gap-2 justify-end flex-wrap">
+                                  <button
+                                    onClick={() => setSelectedStudentForAction({
+                                      code: msg.student_code,
+                                      name: msg.student_name,
+                                      className: chatSelectedClass,
+                                      messageDocId: msg.id
+                                    })}
+                                    className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-black px-3 py-1 rounded-xl transition flex items-center gap-1"
+                                  >
+                                    <Ban className="w-3.5 h-3.5 text-amber-400" />
+                                    <span>إدارة/حظر الطالب</span>
+                                  </button>
+
+                                  <button
+                                    onClick={() => handleDeleteChatMessageDoc(msg.id)}
+                                    className="bg-rose-950/50 hover:bg-rose-900/60 text-rose-300 border border-rose-800 text-xs font-black px-2.5 py-1 rounded-xl transition flex items-center gap-1"
+                                    title="حذف الرسالة"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <span>حذف</span>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                  <div ref={adminChatEndRef} />
+                </div>
+
+                {/* Admin Message Input */}
+                <form onSubmit={handleSendAdminChatMessage} className="p-4 bg-stone-950 border-t border-gray-900 flex gap-2">
+                  <input
+                    type="text"
+                    className="flex-1 bg-white/5 border-2 border-gray-800 focus:border-amber-500 text-stone-100 font-bold p-3.5 rounded-2xl outline-none transition text-right placeholder-gray-500 text-sm md:text-base"
+                    placeholder={`اكتب توجيهاً أو رسالة بصفتك القائد الخيميائي في شات (${chatSelectedClass})...`}
+                    value={adminChatInput}
+                    onChange={(e) => setAdminChatInput(e.target.value)}
+                    disabled={isSendingAdminChat}
+                  />
+                  <button
+                    type="submit"
+                    disabled={isSendingAdminChat || !adminChatInput.trim()}
+                    className="bg-amber-600 hover:bg-amber-500 disabled:bg-gray-800 disabled:text-gray-500 px-6 py-3.5 rounded-2xl text-stone-100 font-black transition flex items-center justify-center shadow-lg shrink-0 gap-2"
+                  >
+                    {isSendingAdminChat ? (
+                      <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <Send className="w-5 h-5 transform rotate-180" />
+                        <span className="hidden sm:inline">إرسال كالقائد</span>
+                      </>
+                    )}
+                  </button>
+                </form>
+              </div>
+
+              {/* Student Ban & Action Modal */}
+              <AnimatePresence>
+                {selectedStudentForAction && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      className="bg-stone-950 border-2 border-amber-500/60 rounded-3xl p-6 sm:p-8 max-w-lg w-full text-right space-y-6 shadow-2xl relative overflow-hidden"
+                    >
+                      <div className="flex items-center justify-between border-b border-gray-800 pb-4">
+                        <button
+                          onClick={() => setSelectedStudentForAction(null)}
+                          className="p-2 text-gray-400 hover:text-stone-100 rounded-xl bg-white/5 transition"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                        <div className="flex items-center gap-3">
+                          <div className="p-3 bg-amber-500/20 rounded-2xl border border-amber-500/40 text-amber-400">
+                            <ShieldAlert className="w-6 h-6" />
+                          </div>
+                          <div>
+                            <h3 className="text-xl font-black text-stone-100">إجراءات الحظر وإدارة الطالب</h3>
+                            <p className="text-xs text-gray-400 font-bold mt-0.5">حدد الإجراء المطلوب للطالب من الشات</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Student Info Card */}
+                      <div className="bg-stone-900 border border-gray-800 rounded-2xl p-4 space-y-2">
+                        <div className="flex justify-between items-center text-sm font-bold">
+                          <span className="text-amber-400 font-mono">{selectedStudentForAction.code}</span>
+                          <span className="text-gray-400">كود الطالب:</span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm font-bold">
+                          <span className="text-stone-100">{selectedStudentForAction.name}</span>
+                          <span className="text-gray-400">اسم الطالب:</span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm font-bold">
+                          <span className="text-sky-400">{selectedStudentForAction.className}</span>
+                          <span className="text-gray-400">الصف الدراسي:</span>
+                        </div>
+                      </div>
+
+                      {/* Ban Action Buttons */}
+                      <div className="space-y-3">
+                        <p className="text-xs font-black text-gray-300">اختر نوع الحظر المطلوب تنفيذها فوراً:</p>
+
+                        <button
+                          onClick={() => handleSetStudentBanType('chat')}
+                          className="w-full bg-amber-950/80 hover:bg-amber-900/90 border-2 border-amber-600/80 text-amber-200 p-4 rounded-2xl font-black text-right transition flex items-start gap-3 shadow-lg"
+                        >
+                          <Ban className="w-6 h-6 text-amber-400 shrink-0 mt-0.5" />
+                          <div>
+                            <span className="block text-sm font-black text-amber-300">🚫 حظر من الشات فقط</span>
+                            <span className="block text-xs font-bold text-gray-400 mt-1 leading-relaxed">
+                              يُمنع الطالب من كتابة أي رسالة في شات الصف فقط، مع إمكانية استخدام المنصة بشكل كامل ودخول الامتحان وفيديوهات الدروس.
+                            </span>
+                          </div>
+                        </button>
+
+                        <button
+                          onClick={() => handleSetStudentBanType('platform')}
+                          className="w-full bg-rose-950/80 hover:bg-rose-900/90 border-2 border-rose-600/80 text-rose-200 p-4 rounded-2xl font-black text-right transition flex items-start gap-3 shadow-lg"
+                        >
+                          <UserX className="w-6 h-6 text-rose-400 shrink-0 mt-0.5" />
+                          <div>
+                            <span className="block text-sm font-black text-rose-300">⛔ حظر شامل من المنصة بالكامل</span>
+                            <span className="block text-xs font-bold text-gray-400 mt-1 leading-relaxed">
+                              يتم حظر حساب الطالب بالكامل من المنصة وتسجيل خروجه فوراً ومنعه من تسجيل الدخول نهائياً.
+                            </span>
+                          </div>
+                        </button>
+
+                        <button
+                          onClick={() => handleSetStudentBanType('unban')}
+                          className="w-full bg-emerald-950/80 hover:bg-emerald-900/90 border-2 border-emerald-600/80 text-emerald-200 p-4 rounded-2xl font-black text-right transition flex items-start gap-3 shadow-lg"
+                        >
+                          <Check className="w-6 h-6 text-emerald-400 shrink-0 mt-0.5" />
+                          <div>
+                            <span className="block text-sm font-black text-emerald-300">✅ إلغاء كافة الحظورات (تفعيل الحساب)</span>
+                            <span className="block text-xs font-bold text-gray-400 mt-1 leading-relaxed">
+                              إلغاء حظر الشات وحظر المنصة وإعادة تفعيل حماس الطالب.
+                            </span>
+                          </div>
+                        </button>
+
+                        {selectedStudentForAction.messageDocId && (
+                          <button
+                            onClick={() => handleDeleteChatMessageDoc(selectedStudentForAction.messageDocId!)}
+                            className="w-full bg-stone-900 hover:bg-stone-800 border border-gray-700 text-gray-300 p-3 rounded-2xl font-bold text-center text-xs transition flex items-center justify-center gap-2 mt-2"
+                          >
+                            <Trash2 className="w-4 h-4 text-rose-400" />
+                            <span>حذف هذه الرسالة المحددة من الشات</span>
+                          </button>
+                        )}
+                      </div>
+                    </motion.div>
+                  </div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
+
+          {activeTab === 'alchemiya' && (
+            <AdminCenterEvaluations />
+          )}
+
           {activeTab === 'stats' && (
             <div className="space-y-6">
               
@@ -1077,6 +1607,11 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   onChange={e => setFilterGroup(e.target.value)}
                 >
                   <option value="all">كل المجموعات (الأيام)</option>
+                  {centerGroups.map(g => (
+                    <option key={g.id} value={g.group_name}>
+                      {g.group_name} ({g.class_name})
+                    </option>
+                  ))}
                   <option value="السبت">السبت</option>
                   <option value="الأحد">الأحد</option>
                   <option value="الإثنين">الإثنين</option>
@@ -1134,15 +1669,48 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                                 </select>
                               </td>
                               <td className="p-4">
-                                <select className="w-full bg-gray-900 border border-gray-700 text-stone-100 px-2 py-1 rounded" value={editStudentData.group_name} onChange={(e) => setEditStudentData({...editStudentData, group_name: e.target.value})}>
-                                  <option value="السبت">السبت</option>
-                                  <option value="الأحد">الأحد</option>
-                                  <option value="الإثنين">الإثنين</option>
-                                  <option value="الثلاثاء">الثلاثاء</option>
-                                  <option value="الأربعاء">الأربعاء</option>
-                                  <option value="الخميس">الخميس</option>
-                                  <option value="الجمعة">الجمعة</option>
-                                </select>
+                                <div className="space-y-1.5 min-w-[160px]">
+                                  <select
+                                    className="w-full bg-gray-900 border border-gray-700 text-stone-100 px-2 py-1.5 rounded text-xs font-bold"
+                                    value={editStudentData.group_name || editStudentData.groupName || ''}
+                                    onChange={(e) => setEditStudentData({
+                                      ...editStudentData,
+                                      group_name: e.target.value,
+                                      groupName: e.target.value
+                                    })}
+                                  >
+                                    <option value="" disabled>اختر المجموعة...</option>
+                                    {centerGroups
+                                      .filter(g => !editStudentData.class_name || g.class_name === editStudentData.class_name)
+                                      .map(g => (
+                                        <option key={g.id} value={g.group_name}>
+                                          {g.group_name} ({g.day_of_week})
+                                        </option>
+                                      ))}
+                                    {centerGroups.length === 0 && (
+                                      <>
+                                        <option value="مجموعة السبت والثلثاء">مجموعة السبت والثلثاء</option>
+                                        <option value="مجموعة الأحد والأربعاء">مجموعة الأحد والأربعاء</option>
+                                        <option value="مجموعة الإثنين والخميس">مجموعة الإثنين والخميس</option>
+                                        <option value="مجموعة الجمعة">مجموعة الجمعة</option>
+                                      </>
+                                    )}
+                                    {editStudentData.group_name && !centerGroups.some(g => g.group_name === editStudentData.group_name) && (
+                                      <option value={editStudentData.group_name}>{editStudentData.group_name}</option>
+                                    )}
+                                  </select>
+                                  <input
+                                    type="text"
+                                    placeholder="أو اكتب اسم مجموعة مخصص..."
+                                    value={editStudentData.group_name || ''}
+                                    onChange={(e) => setEditStudentData({
+                                      ...editStudentData,
+                                      group_name: e.target.value,
+                                      groupName: e.target.value
+                                    })}
+                                    className="w-full bg-stone-950 border border-stone-800 text-stone-300 px-2 py-1 rounded text-[11px] font-bold"
+                                  />
+                                </div>
                               </td>
                               <td className="p-4 text-center">
                                 <button onClick={() => handleSaveStudentEdit(s.id)} className="bg-green-600 hover:bg-green-500 text-stone-100 px-3 py-1 rounded text-xs ml-2">حفظ</button>
@@ -1152,11 +1720,16 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                           ) : (
                             <>
                               <td className="p-4 text-stone-100 uppercase">
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
                                   <span>{s.name}</span>
                                   {s.is_banned && (
-                                    <span className="bg-red-950/80 border border-red-700 text-amber-400 text-[10px] px-2 py-0.5 rounded-md font-black animate-pulse">
-                                      محظور 🛑
+                                    <span className="bg-red-950/80 border border-red-700 text-red-300 text-[10px] px-2 py-0.5 rounded-md font-black animate-pulse">
+                                      محظور منصة 🛑
+                                    </span>
+                                  )}
+                                  {!s.is_banned && s.is_chat_banned && (
+                                    <span className="bg-amber-950/80 border border-amber-700 text-amber-300 text-[10px] px-2 py-0.5 rounded-md font-black">
+                                      محظور شات 🚫
                                     </span>
                                   )}
                                 </div>
@@ -1166,25 +1739,29 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                               <td className="p-4 text-gray-300">{s.class_name}</td>
                               <td className="p-4 text-gray-300">{s.group_name}</td>
                               <td className="p-4 text-center">
-                                <div className="flex items-center justify-center gap-3">
+                                <div className="flex items-center justify-center gap-2 flex-wrap">
                                   <button 
                                     onClick={() => {
                                       setEditingStudent(s.id);
                                       setEditStudentData(s);
                                     }} 
-                                    className="text-gray-400 hover:text-stone-100 transition"
+                                    className="text-gray-400 hover:text-stone-100 transition text-xs font-bold"
                                   >
                                     تعديل
                                   </button>
                                   <button
-                                    onClick={() => handleToggleStudentBan(s.id, !!s.is_banned)}
-                                    className={`text-xs px-2.5 py-1 rounded-xl border font-black transition ${
-                                      s.is_banned 
-                                        ? "bg-green-950/40 border-green-800 text-green-400 hover:bg-green-900/60" 
-                                        : "bg-amber-950/40 border-red-900 text-amber-400 hover:bg-red-900/60"
-                                    }`}
+                                    onClick={() => setSelectedStudentForAction({
+                                      id: s.id,
+                                      code: s.code,
+                                      name: s.name,
+                                      className: s.class_name || s.className || '',
+                                      is_chat_banned: !!s.is_chat_banned,
+                                      is_banned: !!s.is_banned
+                                    })}
+                                    className="text-xs px-2.5 py-1 rounded-xl border border-amber-600/80 bg-amber-950/40 text-amber-300 hover:bg-amber-900/60 font-black transition flex items-center gap-1"
                                   >
-                                    {s.is_banned ? "إلغاء الحظر" : "حظر"}
+                                    <Ban className="w-3 h-3" />
+                                    <span>إدارة الحظر</span>
                                   </button>
                                 </div>
                               </td>
