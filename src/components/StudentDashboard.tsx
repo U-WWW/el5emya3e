@@ -55,6 +55,7 @@ import {
 import QRCode from 'qrcode';
 import CryptoJS from 'crypto-js';
 import VideoPlayerModal from './VideoPlayerModal';
+import EducationalGames from './EducationalGames';
 
 const SECRET_KEY = "JamalAcademy_Secret_2026";
 
@@ -174,7 +175,7 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
   const [selectedAvatar, setSelectedAvatar] = useState<string>('spiderman');
 
   // App Tabs
-  const [activeTab, setActiveTab] = useState<'home' | 'missions' | 'lectures' | 'friday' | 'profile' | 'community'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'missions' | 'lectures' | 'friday' | 'profile' | 'community' | 'games'>('home');
 
   // Real data state
   const [quizzes, setQuizzes] = useState<any[]>([]);
@@ -1483,6 +1484,7 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
                 { id: 'home', label: 'الرئيسية', icon: Home },
                 { id: 'missions', label: 'المهام والاختبارات', icon: BookOpen },
                 { id: 'lectures', label: 'المحاضرات', icon: Play },
+                { id: 'games', label: 'الألعاب التعليمية', icon: Sparkles },
                 { id: 'community', label: 'مجتمع الخيميائي', icon: Users },
                 { id: 'profile', label: 'ملفي', icon: User }
               ].map(tab => {
@@ -1491,7 +1493,7 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
                 return (
                   <button
                     key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
+                    onClick={() => setActiveTab(tab.id as any)}
                     className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold transition-all duration-300 ${
                       isActive 
                         ? 'bg-cyan-500 text-slate-950 font-black shadow-lg shadow-cyan-500/20 scale-105' 
@@ -1530,6 +1532,7 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
             { id: 'home', label: 'الرئيسية', icon: Home },
             { id: 'missions', label: 'مهام', icon: BookOpen },
             { id: 'lectures', label: 'محاضرات', icon: Play },
+            { id: 'games', label: 'ألعاب', icon: Sparkles },
             { id: 'community', label: 'مجتمع', icon: Users },
             { id: 'profile', label: 'ملفي', icon: User }
           ].map(tab => {
@@ -1538,7 +1541,7 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => setActiveTab(tab.id as any)}
                 className={`flex flex-col items-center justify-center p-2 rounded-xl transition-all duration-300 w-16 ${
                   isActive ? 'text-cyan-400 scale-110 font-bold' : 'text-stone-500 hover:text-stone-300'
                 }`}
@@ -1965,6 +1968,35 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
                       </span>
                     </motion.div>
                   </div>
+
+                  {/* Educational Games Feature Banner */}
+                  <motion.div
+                    whileHover={{ scale: 1.01 }}
+                    onClick={() => setActiveTab('games')}
+                    className="cursor-pointer bg-gradient-to-r from-teal-900/90 via-emerald-900/90 to-cyan-950 border-2 border-teal-500/40 p-6 sm:p-8 rounded-3xl shadow-2xl relative overflow-hidden flex flex-col sm:flex-row items-center justify-between gap-6 group"
+                  >
+                    <div className="absolute -right-10 -bottom-10 w-48 h-48 bg-teal-400/20 rounded-full blur-3xl group-hover:bg-teal-400/30 transition-all pointer-events-none" />
+                    
+                    <div className="text-right space-y-2 z-10">
+                      <span className="inline-flex items-center gap-1.5 bg-teal-400/20 border border-teal-400/40 text-teal-300 font-extrabold text-xs px-3 py-1 rounded-full">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-300 fill-amber-300" /> قسم جديد مميز
+                      </span>
+                      <h3 className="text-2xl sm:text-3xl font-black text-white flex items-center gap-2">
+                        قسم الألعاب التعليمية 🎮
+                      </h3>
+                      <p className="text-sm font-bold text-teal-200 max-w-xl leading-relaxed">
+                        جرب تحدي فرز الألوان 🧪 ولغز فيزياء وتدفق المياه 💧 لتطوير مهارات التفكير العلمي والحل المنطقي للألغاز!
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => setActiveTab('games')}
+                      className="z-10 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black px-6 py-3.5 rounded-2xl shadow-lg shadow-amber-500/30 flex items-center gap-2 text-base shrink-0 transition"
+                    >
+                      <Sparkles className="w-5 h-5 fill-slate-950" />
+                      <span>دخول قسم الألعاب</span>
+                    </button>
+                  </motion.div>
 
                   {/* Past attempts log */}
 
@@ -2451,6 +2483,17 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
                     </button>
                   </form>
                 </div>
+              )}
+
+              {activeTab === 'games' && (
+                <EducationalGames
+                  studentName={student?.name}
+                  studentCode={student?.code}
+                  studentId={student?.id}
+                  onNavigateHome={() => setActiveTab('home')}
+                  onNavigateResults={() => setActiveTab('missions')}
+                  onNavigateProfile={() => setActiveTab('profile')}
+                />
               )}
             </div>
 
