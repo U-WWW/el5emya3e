@@ -40,6 +40,7 @@ import {
   Cpu,
   Clock,
   Sparkles,
+  Gamepad2,
   Home,
   MessageCircle,
   Palette,
@@ -246,66 +247,30 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
     const unsubHero = onSnapshot(doc(db, 'settings', 'hero'), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        const isOldHistory = !data.mainTitle 
-          || data.mainTitle.includes('زعيم') 
-          || data.mainTitle.includes('تاريخ')
-          || data.badgeText?.includes('مصر الحديثة') 
-          || data.badgeText?.includes('مؤسس') 
-          || data.description?.includes('التاريخ')
-          || data.description?.includes('حقبة')
-          || data.description?.includes('المنشاوي')
-          || data.imageUrl?.includes('wikimedia')
-          || data.imageUrl?.includes('Auguste')
-          || data.imageUrl?.includes('Couder')
-          || data.imageUrl?.includes('Mehemet');
-
-        if (isOldHistory) {
-          const freshHero = { ...SCIENCE_HERO_DEFAULTS, updatedAt: new Date().toISOString() };
-          setHeroSettings(SCIENCE_HERO_DEFAULTS);
-          setDoc(doc(db, 'settings', 'hero'), freshHero).catch(err => console.error(err));
-        } else {
-          setHeroSettings({
-            imageUrl: data.imageUrl || DEFAULT_HERO_IMAGE,
-            badgeText: data.badgeText || SCIENCE_HERO_DEFAULTS.badgeText,
-            mainTitle: data.mainTitle || SCIENCE_HERO_DEFAULTS.mainTitle,
-            description: data.description || SCIENCE_HERO_DEFAULTS.description
-          });
-        }
+        setHeroSettings({
+          imageUrl: data.imageUrl || DEFAULT_HERO_IMAGE,
+          badgeText: data.badgeText || SCIENCE_HERO_DEFAULTS.badgeText,
+          mainTitle: data.mainTitle || SCIENCE_HERO_DEFAULTS.mainTitle,
+          description: data.description || SCIENCE_HERO_DEFAULTS.description
+        });
       } else {
-        const freshHero = { ...SCIENCE_HERO_DEFAULTS, updatedAt: new Date().toISOString() };
         setHeroSettings(SCIENCE_HERO_DEFAULTS);
-        setDoc(doc(db, 'settings', 'hero'), freshHero).catch(err => console.error(err));
       }
     });
 
     const unsubTeacher = onSnapshot(doc(db, 'settings', 'teacher'), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        const isOldHistory = !data.name 
-          || data.name.includes('محمود') 
-          || data.name.includes('المنشاوي') 
-          || data.subtitle?.includes('صانع الأجيال') 
-          || data.subtitle?.includes('الزعماء') 
-          || data.quote?.includes('التاريخ') 
-          || data.quote?.includes('حكايات');
-
-        if (isOldHistory) {
-          const freshTeacher = { ...SCIENCE_TEACHER_DEFAULTS, updatedAt: new Date().toISOString() };
-          setTeacherSettings(SCIENCE_TEACHER_DEFAULTS);
-          setDoc(doc(db, 'settings', 'teacher'), freshTeacher).catch(err => console.error(err));
-        } else {
-          setTeacherSettings({
-            imageUrl: data.imageUrl || DEFAULT_TEACHER_IMAGE,
-            badgeText: data.badgeText || SCIENCE_TEACHER_DEFAULTS.badgeText,
-            name: data.name || SCIENCE_TEACHER_DEFAULTS.name,
-            subtitle: data.subtitle || SCIENCE_TEACHER_DEFAULTS.subtitle,
-            quote: data.quote || SCIENCE_TEACHER_DEFAULTS.quote
-          });
-        }
+        setTeacherSettings({
+          imageUrl: data.imageUrl || DEFAULT_TEACHER_IMAGE,
+          badgeText: data.badgeText || SCIENCE_TEACHER_DEFAULTS.badgeText,
+          name: data.name || SCIENCE_TEACHER_DEFAULTS.name,
+          subtitle: data.subtitle || SCIENCE_TEACHER_DEFAULTS.subtitle,
+          quote: data.quote || SCIENCE_TEACHER_DEFAULTS.quote
+        });
+        setTeacherAvatarError(false);
       } else {
-        const freshTeacher = { ...SCIENCE_TEACHER_DEFAULTS, updatedAt: new Date().toISOString() };
         setTeacherSettings(SCIENCE_TEACHER_DEFAULTS);
-        setDoc(doc(db, 'settings', 'teacher'), freshTeacher, { merge: true }).catch(err => console.error(err));
       }
     });
 
@@ -333,19 +298,31 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
   const [isChatClosed, setIsChatClosed] = useState(false);
   const communityEndRef = useRef<HTMLDivElement | null>(null);
 
-  // Subscribe to real-time chat settings (open / closed) for student's class
+  // Subscribe to real-time chat settings (open / closed) for student's group
   useEffect(() => {
-    if (!student?.className) return;
-    const docRef = doc(db, 'chat_settings', student.className);
+    const studentGroup = student?.groupName || student?.group_name || student?.className;
+    if (!studentGroup) return;
+
+    const docRef = doc(db, 'chat_settings', studentGroup);
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
         setIsChatClosed(!!docSnap.data()?.is_closed);
+      } else if (student?.className) {
+        // Fallback check if chat was closed on class-level
+        const classDocRef = doc(db, 'chat_settings', student.className);
+        getDoc(classDocRef).then(cSnap => {
+          if (cSnap.exists()) {
+            setIsChatClosed(!!cSnap.data()?.is_closed);
+          } else {
+            setIsChatClosed(false);
+          }
+        }).catch(() => setIsChatClosed(false));
       } else {
         setIsChatClosed(false);
       }
     });
     return () => unsubscribe();
-  }, [student?.className]);
+  }, [student?.groupName, student?.group_name, student?.className]);
 
   // Subscribe to real-time student account status (is_banned, is_chat_banned)
   useEffect(() => {
@@ -370,23 +347,25 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
     return () => unsubscribe();
   }, [student?.code]);
 
-  // Subscribe to real-time community chat for student's grade
+  // Subscribe to real-time community chat for student's group
   useEffect(() => {
     if (!student || activeTab !== 'community') return;
     
-    const className = student.className;
+    const studentGroup = student.groupName || student.group_name || student.className || 'مجموعة السنتر';
     
-    // Subscribe to messages in this class grade
+    // Subscribe to messages in this specific group
     const q = query(
       collection(db, 'grade_chats'),
-      where('class_name', '==', className)
+      where('group_name', '==', studentGroup)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       // Sort client-side to avoid needing composite index
-      const msgs = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() as any }))
-        .sort((a, b) => a.timestamp_num - b.timestamp_num);
+      let msgs = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() as any }));
+
+      // Sort by timestamp
+      msgs.sort((a, b) => a.timestamp_num - b.timestamp_num);
         
       setCommunityMessages(msgs);
       
@@ -520,7 +499,9 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
       }
 
       // 3. Write message to Firestore (this guarantees live chat with no delay because of onSnapshot)
+      const studentGroup = student?.groupName || student?.group_name || student?.className || 'مجموعة السنتر';
       await addDoc(collection(db, 'grade_chats'), {
+        group_name: studentGroup,
         class_name: student.className,
         student_code: student.code,
         student_name: student.name,
@@ -1323,11 +1304,14 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
                       <option value="" disabled className="text-stone-500">اختر المجموعة الخاصة بك...</option>
                       {centerGroups
                         .filter(g => !loginForm.className || g.class_name === loginForm.className)
-                        .map(g => (
-                          <option key={g.id} value={g.group_name} className="text-stone-900 bg-white font-bold">
-                            {g.group_name} ({g.day_of_week})
-                          </option>
-                        ))}
+                        .map(g => {
+                          const timeInfo = [g.day_of_week, g.time].filter(Boolean).join(' • ');
+                          return (
+                            <option key={g.id} value={g.group_name} className="text-stone-900 bg-white font-bold">
+                              {g.group_name} {timeInfo ? `(${timeInfo})` : ''}
+                            </option>
+                          );
+                        })}
                       <option value="مجموعة السبت والثلثاء" className="text-stone-900 bg-white font-bold">مجموعة السبت والثلثاء</option>
                       <option value="مجموعة الأحد والأربعاء" className="text-stone-900 bg-white font-bold">مجموعة الأحد والأربعاء</option>
                       <option value="مجموعة الإثنين والخميس" className="text-stone-900 bg-white font-bold">مجموعة الإثنين والخميس</option>
@@ -1541,10 +1525,11 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
             <nav className="hidden lg:flex items-center gap-2 bg-slate-900/60 p-1.5 rounded-2xl border border-cyan-500/20">
               {[
                 { id: 'home', label: 'الرئيسية', icon: Home },
+                { id: 'friday', label: 'المساعد الذكي (AI)', icon: Sparkles },
+                { id: 'games', label: 'الألعاب التعليمية', icon: Gamepad2 },
                 { id: 'alchemiya', label: 'تقييم السنتر', icon: GraduationCap },
                 { id: 'missions', label: 'المهام والاختبارات', icon: BookOpen },
                 { id: 'lectures', label: 'المحاضرات', icon: Play },
-                { id: 'games', label: 'الألعاب التعليمية', icon: Sparkles },
                 { id: 'community', label: 'مجتمع الخيميائي', icon: Users },
                 { id: 'profile', label: 'ملفي', icon: User }
               ].map(tab => {
@@ -1554,7 +1539,7 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id as any)}
-                    className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold transition-all duration-300 ${
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-300 ${
                       isActive 
                         ? 'bg-cyan-500 text-slate-950 font-black shadow-lg shadow-cyan-500/20 scale-105' 
                         : 'text-stone-300 hover:text-cyan-300 hover:bg-slate-800/80'
@@ -1590,10 +1575,11 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
         <div className="flex justify-around items-center p-2 overflow-x-auto">
           {[
             { id: 'home', label: 'الرئيسية', icon: Home },
-            { id: 'alchemiya', label: 'تقييم السنتر', icon: GraduationCap },
+            { id: 'friday', label: 'ذكاء AI', icon: Sparkles },
+            { id: 'games', label: 'ألعاب', icon: Gamepad2 },
+            { id: 'alchemiya', label: 'السنتر', icon: GraduationCap },
             { id: 'missions', label: 'مهام', icon: BookOpen },
             { id: 'lectures', label: 'محاضرات', icon: Play },
-            { id: 'games', label: 'ألعاب', icon: Sparkles },
             { id: 'profile', label: 'ملفي', icon: User }
           ].map(tab => {
             const Icon = tab.icon;
@@ -2024,6 +2010,42 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
 
                       <button className="whitespace-nowrap px-6 py-3.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black rounded-xl transition shadow-lg flex items-center gap-2 text-base">
                         افتح الواجهة الآن 👈
+                      </button>
+                    </div>
+                  </motion.div>
+
+                  {/* AI Assistant Quick Access Card */}
+                  <motion.div 
+                    whileHover={{ scale: 1.01 }}
+                    onClick={() => setActiveTab('friday')}
+                    className="cursor-pointer bg-gradient-to-r from-amber-950/80 via-stone-900 to-sky-950/80 border-2 border-amber-500/50 hover:border-amber-400 p-6 md:p-8 rounded-3xl relative overflow-hidden shadow-[0_0_30px_rgba(245,158,11,0.25)] transition-all group"
+                  >
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl pointer-events-none group-hover:bg-amber-500/20 transition-all"></div>
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-6 relative z-10 text-right">
+                      <div className="flex items-center gap-5">
+                        <div className="p-4 bg-amber-500/20 border border-amber-400/40 rounded-2xl text-amber-300 shadow-inner group-hover:scale-110 transition-transform">
+                          <Sparkles className="w-10 h-10 animate-pulse" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-black bg-amber-500 text-slate-950 px-3 py-0.5 rounded-full uppercase tracking-wider">
+                              الذكاء الاصطناعي (AI) 🤖
+                            </span>
+                            <span className="text-xs font-bold text-amber-400">
+                              مساعد الخيميائي الفائق 🧪
+                            </span>
+                          </div>
+                          <h3 className="text-2xl font-black text-white">
+                            اسأل المساعد الكيميائي والفيزيائي الذكي
+                          </h3>
+                          <p className="text-sm font-medium text-stone-300 mt-1">
+                            شرح وتبسيط القوانين، حل المعادلات، تعريب الرموز العلمية (ت، جـ، م) والإجابة عن جميع أسئلتك فوراً!
+                          </p>
+                        </div>
+                      </div>
+
+                      <button className="whitespace-nowrap px-6 py-3.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl transition shadow-lg flex items-center gap-2 text-base">
+                        بدء المحادثة الآن 👈
                       </button>
                     </div>
                   </motion.div>
@@ -2487,8 +2509,11 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
                           {isChatClosed ? '🔒 الشات مغلق من قِبل الإدارة' : 'LIVE CHAT ONLINE (شات تفاعلي مباشر)'}
                         </span>
                       </div>
-                      <h4 className="font-sans font-black text-stone-100 text-xl md:text-2xl mt-1">
-                        مجتمع {student?.className} 🛡️
+                      <h4 className="font-sans font-black text-stone-100 text-xl md:text-2xl mt-1 flex items-center gap-2 justify-end flex-wrap">
+                        <span>شات مجتمع:</span>
+                        <span className="text-amber-400">{student?.groupName || student?.group_name || 'مجموعة السنتر'}</span>
+                        <span className="text-stone-400 text-sm">({student?.className})</span>
+                        <span>🛡️</span>
                       </h4>
                       <p className="text-xs text-gray-400 mt-1">
                         تواصل، اسأل زملائك، وتبادل الملاحظات الدراسية مع أبطال دفعتك!

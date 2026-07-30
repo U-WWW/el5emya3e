@@ -487,28 +487,51 @@ export default function AdminCenterEvaluations() {
     try {
       const q = query(collection(db, 'center_records'), where('student_code', '==', student.code));
       const snap = await getDocs(q);
-      const myRecords = snap.docs.map(docSnap => docSnap.data()).filter((r: any) => r.lesson_month === activeMonth);
+      const allRecords = snap.docs.map(docSnap => docSnap.data());
 
-      let attended = 0;
-      let absent = 0;
-      let myTotalScore = 0;
-
-      myRecords.forEach((r: any) => {
-        if (r.attendance === 'حضر') {
-          attended++;
-          myTotalScore += (Number(r.homework_degree) || 0) + (Number(r.recitation_degree) || 0) + (Number(r.exam_degree) || 0) + (Number(r.comprehensive_exam_degree) || 0);
-        } else {
-          absent++;
-        }
+      // Sort records to find the LAST evaluation (latest session)
+      const sortedRecords = [...allRecords].sort((a: any, b: any) => {
+        const timeA = new Date(a.createdAt || a.lesson_date || 0).getTime();
+        const timeB = new Date(b.createdAt || b.lesson_date || 0).getTime();
+        if (timeA !== timeB) return timeB - timeA;
+        return (Number(b.lesson_number) || 0) - (Number(a.lesson_number) || 0);
       });
+
+      const lastRecord = sortedRecords[0];
 
       let formattedPhone = parentPhone.replace(/\D/g, '');
       if (formattedPhone.startsWith('01')) formattedPhone = '2' + formattedPhone;
 
-      const msg = `*تقرير متابعة الطالب: ${student.name}* 🧪\n📅 *شهر:* ${activeMonth}\n\n✅ *حضور:* ${attended} حصص\n❌ *غياب:* ${absent} حصص\n📊 *مجموع النقاط المحققة:* ${myTotalScore}\n\n*الخيميائي للعلوم والكيمياء*`;
+      let msg = `*تقرير تقييم الطالب: ${student.name}* 🧪\n`;
+      msg += `📌 *الصف:* ${student.class_name || student.className || selectedClass}\n`;
+      if (student.group_name || student.groupName) {
+        msg += `👥 *المجموعة:* ${student.group_name || student.groupName}\n`;
+      }
+      msg += `\n`;
+
+      if (lastRecord) {
+        msg += `📝 *بيانات تقييم أحدث حصة (${lastRecord.lesson_date || 'غير محدد'} - حصة رقم ${lastRecord.lesson_number || 1}):*\n`;
+        msg += `• 👤 *الحالة:* ${lastRecord.attendance === 'حضر' ? '✅ حضر' : '❌ غاب'}\n`;
+        if (lastRecord.attendance === 'حضر') {
+          msg += `• 📚 *درجة الواجب:* ${lastRecord.homework_degree ?? 0}\n`;
+          msg += `• 🗣️ *درجة التسميع:* ${lastRecord.recitation_degree ?? 0}\n`;
+          msg += `• ✍️ *درجة الامتحان:* ${lastRecord.exam_degree ?? 0}\n`;
+          if (lastRecord.comprehensive_exam_degree !== null && lastRecord.comprehensive_exam_degree !== undefined && lastRecord.comprehensive_exam_degree !== '') {
+            msg += `• 🌟 *الامتحان الشامل:* ${lastRecord.comprehensive_exam_degree}\n`;
+          }
+          const sessionTotal = (Number(lastRecord.homework_degree) || 0) + (Number(lastRecord.recitation_degree) || 0) + (Number(lastRecord.exam_degree) || 0) + (Number(lastRecord.comprehensive_exam_degree) || 0);
+          msg += `• 🎯 *مجموع تقييم الحصة:* ${sessionTotal}\n`;
+        }
+      } else {
+        msg += `⚠️ *لم يتم تسجيل تقييمات سابقة للطالب بعد.*\n`;
+      }
+
+      msg += `\n*مع تحيات الخيميائي للعلوم والكيمياء* 🧪✨`;
+
       window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(msg)}`, '_blank');
     } catch (e) {
       console.error("WhatsApp report error:", e);
+      alert("حدث خطأ أثناء إعداد تقرير الواتساب.");
     }
   };
 

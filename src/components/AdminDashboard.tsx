@@ -46,6 +46,7 @@ import {
   MessageSquare,
   LogOut,
   Clock,
+  Calendar,
   BarChart3,
   AlertTriangle,
   X,
@@ -78,9 +79,100 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [loginError, setLoginError] = useState(false);
 
   // Nav Tabs
-  const [activeTab, setActiveTab] = useState<'stats' | 'alchemiya' | 'students' | 'videos' | 'quizzes' | 'results' | 'rankings' | 'scanner' | 'messages' | 'banner' | 'community_chats'>('stats');
+  const [activeTab, setActiveTab] = useState<'stats' | 'groups' | 'alchemiya' | 'students' | 'videos' | 'quizzes' | 'results' | 'rankings' | 'scanner' | 'messages' | 'banner' | 'community_chats'>('stats');
+
+  // Group Management State
+  const [selectedGroupClassFilter, setSelectedGroupClassFilter] = useState<string>('all');
+  const [isGroupModalOpen, setIsGroupModalOpen] = useState<boolean>(false);
+  const [editingGroup, setEditingGroup] = useState<any | null>(null);
+  const [groupFormData, setGroupFormData] = useState({
+    group_name: '',
+    class_name: 'الصف الأول الثانوي',
+    day_of_week: 'السبت والأربعاء',
+    time: '04:00 مساءً',
+    notes: ''
+  });
+  const [isSavingGroup, setIsSavingGroup] = useState<boolean>(false);
+
+  const handleOpenAddGroupModal = () => {
+    setEditingGroup(null);
+    setGroupFormData({
+      group_name: '',
+      class_name: selectedGroupClassFilter !== 'all' ? selectedGroupClassFilter : 'الصف الأول الثانوي',
+      day_of_week: 'السبت والأربعاء',
+      time: '04:00 مساءً',
+      notes: ''
+    });
+    setIsGroupModalOpen(true);
+  };
+
+  const handleOpenEditGroupModal = (group: any) => {
+    setEditingGroup(group);
+    setGroupFormData({
+      group_name: group.group_name || '',
+      class_name: group.class_name || 'الصف الأول الثانوي',
+      day_of_week: group.day_of_week || 'السبت والأربعاء',
+      time: group.time || '04:00 مساءً',
+      notes: group.notes || ''
+    });
+    setIsGroupModalOpen(true);
+  };
+
+  const handleSaveGroup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!groupFormData.group_name.trim() || !groupFormData.class_name) {
+      alert("يرجى كتابة اسم المجموعة واختيار الصف الدراسي");
+      return;
+    }
+    setIsSavingGroup(true);
+    try {
+      if (editingGroup?.id) {
+        await updateDoc(doc(db, 'center_groups', editingGroup.id), {
+          group_name: groupFormData.group_name.trim(),
+          class_name: groupFormData.class_name,
+          day_of_week: groupFormData.day_of_week.trim(),
+          time: groupFormData.time.trim(),
+          notes: groupFormData.notes.trim(),
+          updatedAt: new Date().toISOString()
+        });
+        setChatToastNotice("تم تحديث بيانات المجموعة بنجاح! 🟢");
+      } else {
+        await addDoc(collection(db, 'center_groups'), {
+          group_name: groupFormData.group_name.trim(),
+          class_name: groupFormData.class_name,
+          day_of_week: groupFormData.day_of_week.trim(),
+          time: groupFormData.time.trim(),
+          notes: groupFormData.notes.trim(),
+          createdAt: new Date().toISOString()
+        });
+        setChatToastNotice("تم إضافة المجموعة الجديدة بنجاح! 🎉");
+      }
+      setTimeout(() => setChatToastNotice(null), 4000);
+      setIsGroupModalOpen(false);
+      await fetchAdminData();
+    } catch (err) {
+      console.error("Error saving group:", err);
+      alert("حدث خطأ أثناء حفظ المجموعة.");
+    } finally {
+      setIsSavingGroup(false);
+    }
+  };
+
+  const handleDeleteGroup = async (groupId: string, groupName: string) => {
+    if (!confirm(`هل أنت متأكد من حذف المجموعة (${groupName})؟`)) return;
+    try {
+      await deleteDoc(doc(db, 'center_groups', groupId));
+      setChatToastNotice(`تم حذف المجموعة (${groupName}) بنجاح.`);
+      setTimeout(() => setChatToastNotice(null), 4000);
+      await fetchAdminData();
+    } catch (err) {
+      console.error("Error deleting group:", err);
+      alert("حدث خطأ أثناء حذف المجموعة.");
+    }
+  };
 
   // Community Chats Management State
+  const [chatSelectedGroup, setChatSelectedGroup] = useState('مجموعة السبت والثلثاء');
   const [chatSelectedClass, setChatSelectedClass] = useState('الصف الأول الثانوي');
   const [adminChatMessages, setAdminChatMessages] = useState<any[]>([]);
   const [adminChatInput, setAdminChatInput] = useState('');
@@ -395,70 +487,24 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       const heroSnap = await getDoc(doc(db, 'settings', 'hero'));
       if (heroSnap.exists()) {
         const data = heroSnap.data();
-        const isOldHistory = !data.mainTitle 
-          || data.mainTitle.includes('زعيم') 
-          || data.mainTitle.includes('تاريخ')
-          || data.badgeText?.includes('مصر الحديثة') 
-          || data.badgeText?.includes('مؤسس') 
-          || data.description?.includes('التاريخ')
-          || data.description?.includes('حقبة')
-          || data.description?.includes('المنشاوي')
-          || data.imageUrl?.includes('wikimedia')
-          || data.imageUrl?.includes('Auguste')
-          || data.imageUrl?.includes('Couder')
-          || data.imageUrl?.includes('Mehemet');
-
-        if (isOldHistory) {
-          const freshHero = {
-            imageUrl: DEFAULT_HERO_IMAGE,
-            badgeText: 'معلم العلوم والكيمياء',
-            mainTitle: 'مرحباً بك في <span class="text-cyan-400">مختبر الخيميائي</span>',
-            description: 'رحلتك نحو التفوق والدرجات النهائية في مادة العلوم والكيمياء. استكشف المعامل، المعادلات، والتجارب العلمية بأسلوب الخيميائي المبتكر.',
-            updatedAt: new Date().toISOString()
-          };
-          setHeroBanner(freshHero);
-          await setDoc(doc(db, 'settings', 'hero'), freshHero);
-        } else {
-          setHeroBanner({
-            imageUrl: data.imageUrl || DEFAULT_HERO_IMAGE,
-            badgeText: data.badgeText || 'معلم العلوم والكيمياء',
-            mainTitle: data.mainTitle || 'مرحباً بك في <span class="text-cyan-400">مختبر الخيميائي</span>',
-            description: data.description || 'رحلتك نحو التفوق والدرجات النهائية في مادة العلوم والكيمياء. استكشف المعامل، المعادلات، والتجارب العلمية بأسلوب الخيميائي المبتكر.'
-          });
-        }
+        setHeroBanner({
+          imageUrl: data.imageUrl || DEFAULT_HERO_IMAGE,
+          badgeText: data.badgeText || 'معلم العلوم والكيمياء',
+          mainTitle: data.mainTitle || 'مرحباً بك في <span class="text-cyan-400">مختبر الخيميائي</span>',
+          description: data.description || 'رحلتك نحو التفوق والدرجات النهائية في مادة العلوم والكيمياء. استكشف المعامل، المعادلات، والتجارب العلمية بأسلوب الخيميائي المبتكر.'
+        });
       }
 
       const teacherSnap = await getDoc(doc(db, 'settings', 'teacher'));
       if (teacherSnap.exists()) {
         const tData = teacherSnap.data();
-        const isOldHistory = !tData.name 
-          || tData.name.includes('محمود') 
-          || tData.name.includes('المنشاوي') 
-          || tData.subtitle?.includes('صانع الأجيال') 
-          || tData.subtitle?.includes('الزعماء') 
-          || tData.quote?.includes('التاريخ') 
-          || tData.quote?.includes('حكايات');
-
-        if (isOldHistory) {
-          const freshTeacher = {
-            imageUrl: DEFAULT_TEACHER_IMAGE,
-            badgeText: 'كيميائي الأجيال',
-            name: 'الأستاذ الخيميائي',
-            subtitle: 'خبير تدريس مادة العلوم والكيمياء',
-            quote: 'الكيمياء ليست مجرد معادلات تُحفظ، بل هي سر فهم الكون وعجائب الطبيعة من حولنا. افهم واكتشف لتتفوق!',
-            updatedAt: new Date().toISOString()
-          };
-          setTeacherCard(freshTeacher);
-          await setDoc(doc(db, 'settings', 'teacher'), freshTeacher);
-        } else {
-          setTeacherCard({
-            imageUrl: tData.imageUrl || DEFAULT_TEACHER_IMAGE,
-            badgeText: tData.badgeText || 'كيميائي الأجيال',
-            name: tData.name || 'الأستاذ الخيميائي',
-            subtitle: tData.subtitle || 'خبير تدريس مادة العلوم والكيمياء',
-            quote: tData.quote || 'الكيمياء ليست مجرد معادلات تُحفظ، بل هي سر فهم الكون وعجائب الطبيعة من حولنا. افهم واكتشف لتتفوق!'
-          });
-        }
+        setTeacherCard({
+          imageUrl: tData.imageUrl || DEFAULT_TEACHER_IMAGE,
+          badgeText: tData.badgeText || 'كيميائي الأجيال',
+          name: tData.name || 'الأستاذ الخيميائي',
+          subtitle: tData.subtitle || 'خبير تدريس مادة العلوم والكيمياء',
+          quote: tData.quote || 'الكيمياء ليست مجرد معادلات تُحفظ، بل هي سر فهم الكون وعجائب الطبيعة من حولنا. افهم واكتشف لتتفوق!'
+        });
       }
 
     } catch (err) {
@@ -470,11 +516,11 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   // Real-time listener for community messages in Admin Dashboard
   useEffect(() => {
-    if (!authorized || activeTab !== 'community_chats') return;
+    if (!authorized || activeTab !== 'community_chats' || !chatSelectedGroup) return;
 
     const q = query(
       collection(db, 'grade_chats'),
-      where('class_name', '==', chatSelectedClass)
+      where('group_name', '==', chatSelectedGroup)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -488,13 +534,13 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     });
 
     return () => unsubscribe();
-  }, [authorized, activeTab, chatSelectedClass]);
+  }, [authorized, activeTab, chatSelectedGroup]);
 
   // Real-time listener for chat settings (open/closed) in Admin Dashboard
   useEffect(() => {
-    if (!authorized || activeTab !== 'community_chats') return;
+    if (!authorized || activeTab !== 'community_chats' || !chatSelectedGroup) return;
 
-    const docRef = doc(db, 'chat_settings', chatSelectedClass);
+    const docRef = doc(db, 'chat_settings', chatSelectedGroup);
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
         setIsChatClosedForSelectedClass(!!docSnap.data()?.is_closed);
@@ -504,25 +550,26 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     });
 
     return () => unsubscribe();
-  }, [authorized, activeTab, chatSelectedClass]);
+  }, [authorized, activeTab, chatSelectedGroup]);
 
   const [isTogglingChatStatus, setIsTogglingChatStatus] = useState(false);
   const [chatToastNotice, setChatToastNotice] = useState<string | null>(null);
 
-  // Toggle chat status open/closed for class
+  // Toggle chat status open/closed for group
   const handleToggleChatOpenClose = async () => {
-    if (isTogglingChatStatus) return;
+    if (isTogglingChatStatus || !chatSelectedGroup) return;
     const newClosedStatus = !isChatClosedForSelectedClass;
     setIsTogglingChatStatus(true);
     setChatToastNotice(null);
 
     try {
-      await setDoc(doc(db, 'chat_settings', chatSelectedClass), {
+      await setDoc(doc(db, 'chat_settings', chatSelectedGroup), {
         is_closed: newClosedStatus,
+        group_name: chatSelectedGroup,
         updatedAt: new Date().toISOString(),
         updatedBy: 'الأستاذ الخيميائي'
       });
-      const msg = `تم ${newClosedStatus ? "إغلاق 🔒" : "فتح 🔓"} الشات بنجاح لصف (${chatSelectedClass})`;
+      const msg = `تم ${newClosedStatus ? "إغلاق 🔒" : "فتح 🔓"} الشات بنجاح لمجموعة (${chatSelectedGroup})`;
       setChatToastNotice(msg);
       setTimeout(() => setChatToastNotice(null), 4000);
     } catch (err) {
@@ -534,18 +581,21 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     }
   };
 
-  // Send admin message to class chat
+  // Send admin message to group chat
   const handleSendAdminChatMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!adminChatInput.trim() || isSendingAdminChat) return;
+    if (!adminChatInput.trim() || isSendingAdminChat || !chatSelectedGroup) return;
 
     const text = adminChatInput.trim();
     setAdminChatInput('');
     setIsSendingAdminChat(true);
 
+    const targetGroupObj = centerGroups.find(g => g.group_name === chatSelectedGroup);
+
     try {
       await addDoc(collection(db, 'grade_chats'), {
-        class_name: chatSelectedClass,
+        group_name: chatSelectedGroup,
+        class_name: targetGroupObj?.class_name || chatSelectedClass || 'عام',
         student_code: 'ADMIN',
         student_name: 'الأستاذ الخيميائي (القائد) 👑',
         avatar: 'crown',
@@ -1067,6 +1117,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
           <h3 className="text-gray-500 font-black text-xs uppercase tracking-widest mb-6 border-b border-gray-800 pb-2">أقسام لوحة التحكم</h3>
           {[
             { id: 'stats', label: 'لوحة التحكم', icon: Shield },
+            { id: 'groups', label: 'إدارة المجاميع 👥', icon: Users },
             { id: 'community_chats', label: 'شاتات المجتمعات 💬', icon: MessageSquare },
             { id: 'alchemiya', label: 'تقييم طلاب السنتر', icon: GraduationCap },
             { id: 'banner', label: 'تعديل بنر الهوم', icon: ImageIcon },
@@ -1105,6 +1156,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         <div className="flex justify-start items-center h-20 px-4 gap-4 whitespace-nowrap min-w-max">
           {[
             { id: 'stats', label: 'لوحة التحكم', icon: Shield },
+            { id: 'groups', label: 'المجاميع', icon: Users },
             { id: 'community_chats', label: 'الشاتات', icon: MessageSquare },
             { id: 'alchemiya', label: 'الخيميائي', icon: GraduationCap },
             { id: 'banner', label: 'البنر', icon: ImageIcon },
@@ -1142,6 +1194,150 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
         {/* Content Tabs Switch */}
         <div>
+          {activeTab === 'groups' && (
+            <div className="space-y-6">
+              {/* Header Card */}
+              <div className="bg-stone-950/80 border border-gray-800 rounded-3xl p-6 md:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-2xl">
+                <div className="space-y-2 text-right">
+                  <span className="inline-flex items-center gap-1.5 bg-cyan-950/80 border border-cyan-500/50 text-cyan-400 font-extrabold text-xs px-3 py-1 rounded-full">
+                    <Users className="w-4 h-4 text-cyan-400" /> تنظيم السنتر والمجموعات
+                  </span>
+                  <h3 className="text-2xl md:text-3xl font-black text-stone-100 flex items-center gap-2">
+                    إدارة المجاميع والمواعيد 👥
+                  </h3>
+                  <p className="text-sm font-bold text-gray-400 max-w-2xl leading-relaxed">
+                    من هنا يمكنك إضافة وتعديل مجاميع الدروس والسنتر (تحديد اسم الصف، اسم المجموعة، أيام الحضور، والمواعيد). يظهر هذا القائمة تلقائياً للطلاب أثناء تسجيل الحساب جديد لتسهيل اختيار المواعيد المناسبة.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleOpenAddGroupModal}
+                  className="px-6 py-3.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black rounded-2xl shadow-xl flex items-center justify-center gap-2 transition active:scale-95 shrink-0 cursor-pointer"
+                >
+                  <Plus className="w-5 h-5 stroke-[3]" />
+                  <span>إضافة مجموعة جديدة</span>
+                </button>
+              </div>
+
+              {/* Filter By Class */}
+              <div className="bg-stone-900/60 border border-stone-800 rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-2 text-stone-300 font-bold text-sm w-full md:w-auto">
+                  <Filter className="w-4 h-4 text-cyan-400" />
+                  <span>تصفية حسب الصف الدراسي:</span>
+                </div>
+                <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-2 md:pb-0 scrollbar-none">
+                  {[
+                    { id: 'all', label: 'جميع الصفوف' },
+                    { id: 'الصف الأول الإعدادي', label: '١ إعدادي' },
+                    { id: 'الصف الثاني الإعدادي', label: '٢ إعدادي' },
+                    { id: 'الصف الثالث الإعدادي', label: '٣ إعدادي' },
+                    { id: 'الصف الأول الثانوي', label: '١ ثانوي' },
+                    { id: 'الصف الثاني الثانوي', label: '٢ ثانوي' },
+                    { id: 'الصف الثالث الثانوي', label: '٣ ثانوي' },
+                  ].map(c => (
+                    <button
+                      key={c.id}
+                      onClick={() => setSelectedGroupClassFilter(c.id)}
+                      className={`px-4 py-2 rounded-xl text-xs font-black whitespace-nowrap transition cursor-pointer ${
+                        selectedGroupClassFilter === c.id
+                          ? 'bg-cyan-500 text-slate-950 shadow-md'
+                          : 'bg-stone-950 text-stone-400 hover:text-stone-200 border border-stone-800'
+                      }`}
+                    >
+                      {c.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Groups List Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {centerGroups
+                  .filter(g => selectedGroupClassFilter === 'all' || g.class_name === selectedGroupClassFilter)
+                  .map(group => {
+                    const enrolledCount = students.filter(s => 
+                      s.class_name === group.class_name && 
+                      (s.group_name === group.group_name || s.groupName === group.group_name)
+                    ).length;
+
+                    return (
+                      <div 
+                        key={group.id} 
+                        className="bg-stone-950/80 border border-stone-800 hover:border-cyan-500/50 rounded-3xl p-6 space-y-4 transition-all duration-300 shadow-xl flex flex-col justify-between"
+                      >
+                        <div className="space-y-3">
+                          <div className="flex items-start justify-between gap-2 border-b border-stone-800 pb-3">
+                            <div>
+                              <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-cyan-950 border border-cyan-800 text-cyan-400 mb-1 inline-block">
+                                {group.class_name}
+                              </span>
+                              <h4 className="text-xl font-black text-stone-100">{group.group_name}</h4>
+                            </div>
+                            <span className="text-xs font-black bg-stone-900 border border-stone-700 text-stone-300 px-3 py-1 rounded-xl flex items-center gap-1 shrink-0">
+                              <Users className="w-3.5 h-3.5 text-cyan-400" />
+                              {enrolledCount} طالب
+                            </span>
+                          </div>
+
+                          <div className="space-y-2 text-sm font-bold text-stone-300">
+                            <div className="flex items-center gap-2">
+                              <Calendar className="w-4 h-4 text-amber-400 shrink-0" />
+                              <span>أيام الحضور: <strong className="text-stone-100">{group.day_of_week || 'غير محدد'}</strong></span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Clock className="w-4 h-4 text-cyan-400 shrink-0" />
+                              <span>التوقيت / الموعد: <strong className="text-stone-100">{group.time || 'غير محدد'}</strong></span>
+                            </div>
+                            {group.notes && (
+                              <div className="flex items-start gap-2 text-xs text-stone-400 pt-1">
+                                <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                                <span>ملاحظات: {group.notes}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-3 border-t border-stone-900">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditGroupModal(group)}
+                            className="flex-1 bg-stone-900 hover:bg-stone-800 border border-stone-700 text-stone-200 font-black py-2.5 rounded-xl transition text-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            <span>تعديل</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteGroup(group.id, group.group_name)}
+                            className="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/80 text-rose-300 font-black px-3 py-2.5 rounded-xl transition text-xs flex items-center justify-center gap-1 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                {centerGroups.filter(g => selectedGroupClassFilter === 'all' || g.class_name === selectedGroupClassFilter).length === 0 && (
+                  <div className="col-span-full bg-stone-950/40 border border-stone-800/80 rounded-3xl p-12 text-center space-y-4">
+                    <Users className="w-12 h-12 text-stone-600 mx-auto" />
+                    <h4 className="text-stone-300 font-black text-lg">لا توجد مجاميع مضافة في هذا الصف حالياً</h4>
+                    <p className="text-stone-500 text-xs font-bold max-w-md mx-auto">
+                      قم بإضافة مجموعة جديدة ليتمكن الطلاب في هذا الصف من اختيارها أثناء تسجيل الحساب.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleOpenAddGroupModal}
+                      className="px-5 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black rounded-xl text-xs inline-flex items-center gap-2 cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" /> إضافة مجموعة الآن
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {activeTab === 'community_chats' && (
             <div className="space-y-6">
               {/* Header Card */}
@@ -1158,26 +1354,30 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   </p>
                 </div>
 
-                {/* Class Selector & Open/Close Toggle Button */}
+                {/* Group Selector & Open/Close Toggle Button */}
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto shrink-0">
-                  <select
-                    value={chatSelectedClass}
-                    onChange={(e) => setChatSelectedClass(e.target.value)}
-                    className="bg-stone-900 border-2 border-gray-700 text-stone-100 font-bold p-3.5 rounded-2xl outline-none focus:border-amber-500 transition text-right cursor-pointer"
-                  >
-                    <option value="الصف الأول الابتدائي">الصف الأول الابتدائي</option>
-                    <option value="الصف الثاني الابتدائي">الصف الثاني الابتدائي</option>
-                    <option value="الصف الثالث الابتدائي">الصف الثالث الابتدائي</option>
-                    <option value="الصف الرابع الابتدائي">الصف الرابع الابتدائي</option>
-                    <option value="الصف الخامس الابتدائي">الصف الخامس الابتدائي</option>
-                    <option value="الصف السادس الابتدائي">الصف السادس الابتدائي</option>
-                    <option value="الصف الأول الإعدادي">الصف الأول الإعدادي</option>
-                    <option value="الصف الثاني الإعدادي">الصف الثاني الإعدادي</option>
-                    <option value="الصف الثالث الإعدادي">الصف الثالث الإعدادي</option>
-                    <option value="الصف الأول الثانوي">الصف الأول الثانوي</option>
-                    <option value="الصف الثاني الثانوي">الصف الثاني الثانوي</option>
-                    <option value="الصف الثالث الثانوي">الصف الثالث الثانوي</option>
-                  </select>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[11px] font-black text-cyan-400 text-right">اختر المجموعــة:</span>
+                    <select
+                      value={chatSelectedGroup}
+                      onChange={(e) => setChatSelectedGroup(e.target.value)}
+                      className="bg-stone-900 border-2 border-gray-700 text-stone-100 font-bold p-3.5 rounded-2xl outline-none focus:border-amber-500 transition text-right cursor-pointer"
+                    >
+                      {centerGroups.map(g => (
+                        <option key={g.id} value={g.group_name} className="bg-stone-900 text-stone-100">
+                          {g.group_name} — {g.class_name} ({g.day_of_week || ''})
+                        </option>
+                      ))}
+                      {centerGroups.length === 0 && (
+                        <>
+                          <option value="مجموعة السبت والثلثاء" className="bg-stone-900 text-stone-100">مجموعة السبت والثلثاء</option>
+                          <option value="مجموعة الأحد والأربعاء" className="bg-stone-900 text-stone-100">مجموعة الأحد والأربعاء</option>
+                          <option value="مجموعة الإثنين والخميس" className="bg-stone-900 text-stone-100">مجموعة الإثنين والخميس</option>
+                          <option value="مجموعة السنتر" className="bg-stone-900 text-stone-100">مجموعة السنتر</option>
+                        </>
+                      )}
+                    </select>
+                  </div>
 
                   {/* Current Status Badge & Action Button */}
                   <div className="flex flex-col items-end gap-2">
@@ -1187,7 +1387,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                         : 'bg-emerald-950/90 border-emerald-600 text-emerald-300'
                     }`}>
                       <span className={`w-2.5 h-2.5 rounded-full ${isChatClosedForSelectedClass ? 'bg-rose-500' : 'bg-emerald-500 animate-pulse'}`} />
-                      <span>الحالة الحالية: {isChatClosedForSelectedClass ? '🔒 الشات مَغْلَق الآن عن الطلاب' : '🟢 الشات مَفْتُوح الآن للطلاب'}</span>
+                      <span>الحالة: {isChatClosedForSelectedClass ? '🔒 مَغْلَق للطلاب' : '🟢 مَفْتُوح للطلاب'}</span>
                     </div>
 
                     <button
@@ -1208,12 +1408,12 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                       ) : isChatClosedForSelectedClass ? (
                         <>
                           <Unlock className="w-5 h-5" />
-                          <span>اضغط هنا لـ (فتح الشات للطلاب) 🔓</span>
+                          <span>فتح الشات للمجموعة 🔓</span>
                         </>
                       ) : (
                         <>
                           <Lock className="w-5 h-5" />
-                          <span>اضغط هنا لـ (إغلاق الشات عن الطلاب) 🔒</span>
+                          <span>إغلاق الشات عن المجموعة 🔒</span>
                         </>
                       )}
                     </button>
@@ -1241,12 +1441,12 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                     </div>
                     <div className="text-right">
                       <h4 className="text-stone-100 font-black text-base md:text-lg flex items-center gap-2">
-                        شات مجتمع: <span className="text-amber-400">{chatSelectedClass}</span>
+                        شات مجتمع: <span className="text-amber-400">{chatSelectedGroup}</span>
                       </h4>
                       <p className="text-xs text-gray-400 font-bold mt-0.5">
                         {isChatClosedForSelectedClass 
-                          ? '🔴 الشات مغلق حالياً عن الطلاب (يمكنك الكتابة بصفتك القائد)' 
-                          : '🟢 الشات مفتوح ومتاح للطلاب لإرسال الرسائل'}
+                          ? '🔴 الشات مغلق حالياً عن طلاب هذه المجموعة (يمكنك الكتابة بصفتك القائد)' 
+                          : '🟢 الشات مفتوح ومتاح لطلاب هذه المجموعة لإرسال الرسائل'}
                       </p>
                     </div>
                   </div>
@@ -1261,7 +1461,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   {adminChatMessages.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-center space-y-3 p-6">
                       <MessageCircle className="w-12 h-12 text-gray-600" />
-                      <h5 className="text-gray-400 font-black text-lg">لا توجد رسائل في شات {chatSelectedClass} حتى الآن</h5>
+                      <h5 className="text-gray-400 font-black text-lg">لا توجد رسائل في شات {chatSelectedGroup} حتى الآن</h5>
                       <p className="text-xs text-gray-500 max-w-sm">
                         قم بكتابة أول رسالة لتشجيع الطلاب أو توجيه تعليمات خاصة بالصف.
                       </p>
@@ -2038,6 +2238,111 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                     <h4 className="text-xl md:text-2xl font-black text-stone-100 italic uppercase">
                       الاختبار: {selectedQuiz.quiz_name} ({quizQuestions.length} أسئلة)
                     </h4>
+                  </div>
+
+                  {/* AI Question Generator Box */}
+                  <div className="bg-gradient-to-r from-cyan-950/40 via-stone-950/80 to-purple-950/40 border-2 border-cyan-500/30 p-6 rounded-2xl h-fit max-w-3xl mx-auto shadow-2xl relative overflow-hidden mb-6">
+                    <div className="flex items-center gap-3 border-b border-cyan-800/40 pb-3 mb-4">
+                      <div className="p-2.5 bg-cyan-500/20 text-cyan-400 rounded-xl border border-cyan-500/40">
+                        <Sparkles className="w-6 h-6 animate-pulse" />
+                      </div>
+                      <div>
+                        <h5 className="font-sans font-black text-stone-100 text-lg tracking-wide">
+                          توليد أسئلة الاختبار بالذكاء الاصطناعي (AI) 🤖✨
+                        </h5>
+                        <p className="text-xs font-bold text-cyan-300">
+                          أنشئ أسئلة اختيار من متعدد مع تعريب الرموز والقوانين تلقائياً إضافةً إلى هذا الاختبار مباشرة
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-black text-cyan-300 uppercase mb-1 text-right">عنوان الموضوع / المفهوم العلمي</label>
+                        <input
+                          type="text"
+                          placeholder="مثال: التفاعلات الكيميائية والموازنة، قانون أوم، المقاومة والتوصيل..."
+                          className="w-full bg-stone-900/90 border-2 border-stone-700 focus:border-cyan-400 text-stone-100 font-bold p-3 rounded-xl outline-none text-right"
+                          value={aiTopic}
+                          onChange={e => setAiTopic(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-xs font-black text-stone-400 mb-1 text-right">الصف الدراسي</label>
+                          <select
+                            className="w-full bg-stone-900 border-2 border-stone-700 text-stone-100 rounded-xl p-2.5 text-xs font-bold outline-none"
+                            value={aiClass}
+                            onChange={e => setAiClass(e.target.value)}
+                          >
+                            <option value="الصف الأول الإعدادي">الصف الأول الإعدادي</option>
+                            <option value="الصف الثاني الإعدادي">الصف الثاني الإعدادي</option>
+                            <option value="الصف الثالث الإعدادي">الصف الثالث الإعدادي</option>
+                            <option value="الصف الأول الثانوي">الصف الأول الثانوي</option>
+                            <option value="الصف الثاني الثانوي">الصف الثاني الثانوي</option>
+                            <option value="الصف الثالث الثانوي">الصف الثالث الثانوي</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-black text-stone-400 mb-1 text-right">مستوى الصعوبة</label>
+                          <select
+                            className="w-full bg-stone-900 border-2 border-stone-700 text-stone-100 rounded-xl p-2.5 text-xs font-bold outline-none"
+                            value={aiDifficulty}
+                            onChange={e => setAiDifficulty(e.target.value)}
+                          >
+                            <option value="سهل">سهل (أساسي)</option>
+                            <option value="متوسط">متوسط (منهجي)</option>
+                            <option value="متقدم">متقدم (للمتفوقين)</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-black text-stone-400 mb-1 text-right">عدد الأسئلة</label>
+                          <select
+                            className="w-full bg-stone-900 border-2 border-stone-700 text-stone-100 rounded-xl p-2.5 text-xs font-bold outline-none"
+                            value={aiNumQuestions}
+                            onChange={e => setAiNumQuestions(Number(e.target.value))}
+                          >
+                            <option value={3}>3 أسئلة</option>
+                            <option value={5}>5 أسئلة</option>
+                            <option value={10}>10 أسئلة</option>
+                            <option value={15}>15 سؤالاً</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-black text-stone-400 mb-1 text-right">نص إضافي أو مقتطف من كتاب (اختياري)</label>
+                        <textarea
+                          rows={2}
+                          placeholder="يمكنك لصق فقرة أو قوانين معينة ترغب أن يستند إليها الذكاء الاصطناعي..."
+                          className="w-full bg-stone-900/90 border-2 border-stone-700 focus:border-cyan-400 text-stone-100 font-bold p-3 rounded-xl outline-none text-right text-xs"
+                          value={aiCustomText}
+                          onChange={e => setAiCustomText(e.target.value)}
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleGenerateAiQuiz}
+                        disabled={isGeneratingAi}
+                        className="w-full bg-gradient-to-r from-cyan-500 via-sky-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black py-3.5 rounded-xl transition shadow-xl text-base flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                      >
+                        {isGeneratingAi ? (
+                          <>
+                            <div className="w-5 h-5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                            جاري إنشاء الأسئلة بالذكاء الاصطناعي...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-5 h-5" />
+                            توليد وإضافة الأسئلة للاختبار بالذكاء الاصطناعي
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
 
                   {/* Manual question addition */}
@@ -3113,6 +3418,143 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 </div>
               )}
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ADD / EDIT GROUP MODAL */}
+      <AnimatePresence>
+        {isGroupModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-stone-950 border border-stone-800 rounded-3xl max-w-lg w-full p-6 md:p-8 space-y-6 shadow-2xl text-right"
+            >
+              <div className="flex items-center justify-between border-b border-stone-800 pb-4">
+                <h3 className="text-xl font-black text-stone-100 flex items-center gap-2">
+                  <Users className="w-5 h-5 text-cyan-400" />
+                  {editingGroup ? 'تعديل بيانات المجموعة' : 'إضافة مجموعة جديدة ➕'}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setIsGroupModalOpen(false)}
+                  className="p-2 text-stone-400 hover:text-stone-100 rounded-xl hover:bg-stone-900 transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveGroup} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-black text-cyan-400 uppercase tracking-wider mb-2">
+                    الصف الدراسي
+                  </label>
+                  <select
+                    required
+                    value={groupFormData.class_name}
+                    onChange={e => setGroupFormData({ ...groupFormData, class_name: e.target.value })}
+                    className="w-full bg-stone-900 border border-stone-700 focus:border-cyan-400 text-stone-100 rounded-2xl p-3.5 font-bold outline-none text-right transition cursor-pointer"
+                  >
+                    <optgroup label="المرحلة الإعدادية" className="text-stone-900 bg-white font-bold">
+                      <option value="الصف الأول الإعدادي">الصف الأول الإعدادي</option>
+                      <option value="الصف الثاني الإعدادي">الصف الثاني الإعدادي</option>
+                      <option value="الصف الثالث الإعدادي">الصف الثالث الإعدادي</option>
+                    </optgroup>
+                    <optgroup label="المرحلة الثانوية" className="text-stone-900 bg-white font-bold">
+                      <option value="الصف الأول الثانوي">الصف الأول الثانوي</option>
+                      <option value="الصف الثاني الثانوي">الصف الثاني الثانوي</option>
+                      <option value="الصف الثالث الثانوي">الصف الثالث الثانوي</option>
+                    </optgroup>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-black text-cyan-400 uppercase tracking-wider mb-2">
+                    اسم المجموعة (مثال: مجموعة أ - السبت والثلثاء)
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="اكتب اسم المجموعة هنا..."
+                    value={groupFormData.group_name}
+                    onChange={e => setGroupFormData({ ...groupFormData, group_name: e.target.value })}
+                    className="w-full bg-stone-900 border border-stone-700 focus:border-cyan-400 text-stone-100 rounded-2xl p-3.5 font-bold outline-none text-right transition"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-black text-cyan-400 uppercase tracking-wider mb-2">
+                      أيام الحضور
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="مثال: السبت والأربعاء"
+                      value={groupFormData.day_of_week}
+                      onChange={e => setGroupFormData({ ...groupFormData, day_of_week: e.target.value })}
+                      className="w-full bg-stone-900 border border-stone-700 focus:border-cyan-400 text-stone-100 rounded-2xl p-3.5 font-bold outline-none text-right transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-black text-cyan-400 uppercase tracking-wider mb-2">
+                      التوقيت / الموعد
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="مثال: 04:00 مساءً"
+                      value={groupFormData.time}
+                      onChange={e => setGroupFormData({ ...groupFormData, time: e.target.value })}
+                      className="w-full bg-stone-900 border border-stone-700 focus:border-cyan-400 text-stone-100 rounded-2xl p-3.5 font-bold outline-none text-right transition"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-black text-stone-400 uppercase tracking-wider mb-2">
+                    ملاحظات أو القاعة/السنتر (اختياري)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="مثال: القاعة الرئيسية - سنتر الأمل"
+                    value={groupFormData.notes}
+                    onChange={e => setGroupFormData({ ...groupFormData, notes: e.target.value })}
+                    className="w-full bg-stone-900 border border-stone-700 focus:border-cyan-400 text-stone-100 rounded-2xl p-3.5 font-bold outline-none text-right transition text-xs"
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-4 border-t border-stone-800">
+                  <button
+                    type="submit"
+                    disabled={isSavingGroup}
+                    className="flex-1 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black py-3.5 rounded-2xl transition flex items-center justify-center gap-2 text-sm cursor-pointer"
+                  >
+                    {isSavingGroup ? (
+                      <>
+                        <span className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                        <span>جاري الحفظ...</span>
+                      </>
+                    ) : (
+                      <span>{editingGroup ? 'تحديث المجموعة' : 'إضافة المجموعة'}</span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsGroupModalOpen(false)}
+                    className="px-5 bg-stone-900 hover:bg-stone-800 border border-stone-700 text-stone-300 font-black py-3.5 rounded-2xl transition text-sm cursor-pointer"
+                  >
+                    إلغاء
+                  </button>
+                </div>
+              </form>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
