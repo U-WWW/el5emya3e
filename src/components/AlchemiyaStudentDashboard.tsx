@@ -43,10 +43,14 @@ export interface AlchemiyaRecord {
   lesson_date: string;
   lesson_month: string;
   attendance: 'حضر' | 'غاب';
-  homework_degree: number;       // Max 10
-  recitation_degree: number;     // Max 10
-  exam_degree: number;           // Max 20
-  comprehensive_exam_degree: number; // Max 50
+  homework_degree: number;
+  max_homework_degree?: number;
+  recitation_degree: number;
+  max_recitation_degree?: number;
+  exam_degree: number;
+  max_exam_degree?: number;
+  comprehensive_exam_degree: number;
+  max_comprehensive_exam_degree?: number;
   teacher_note?: string;
 }
 
@@ -495,28 +499,28 @@ export default function AlchemiyaStudentDashboard({ currentStudent, onClose }: C
                           <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
                             <span className="text-[10px] text-slate-400 block font-bold mb-0.5">الواجب</span>
                             <span className="text-sm font-black font-mono text-cyan-300">
-                              {record.homework_degree ?? 0} <span className="text-[10px] text-slate-500 font-normal">/10</span>
+                              {record.homework_degree ?? 0} <span className="text-[10px] text-slate-500 font-normal">/{record.max_homework_degree || 10}</span>
                             </span>
                           </div>
 
                           <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
                             <span className="text-[10px] text-slate-400 block font-bold mb-0.5">التسميع</span>
                             <span className="text-sm font-black font-mono text-indigo-300">
-                              {record.recitation_degree ?? 0} <span className="text-[10px] text-slate-500 font-normal">/10</span>
+                              {record.recitation_degree ?? 0} <span className="text-[10px] text-slate-500 font-normal">/{record.max_recitation_degree || 10}</span>
                             </span>
                           </div>
 
                           <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
                             <span className="text-[10px] text-slate-400 block font-bold mb-0.5">امتحان الحصة</span>
                             <span className="text-sm font-black font-mono text-amber-300">
-                              {record.exam_degree ?? 0} <span className="text-[10px] text-slate-500 font-normal">/20</span>
+                              {record.exam_degree ?? 0} <span className="text-[10px] text-slate-500 font-normal">/{record.max_exam_degree || 20}</span>
                             </span>
                           </div>
 
                           <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
                             <span className="text-[10px] text-cyan-400 block font-bold mb-0.5">الامتحان الشامل</span>
                             <span className="text-sm font-black font-mono text-emerald-300">
-                              {record.comprehensive_exam_degree ? `${record.comprehensive_exam_degree} /50` : '-'}
+                              {record.comprehensive_exam_degree !== null && record.comprehensive_exam_degree !== undefined && record.comprehensive_exam_degree !== '' ? `${record.comprehensive_exam_degree} /${record.max_comprehensive_exam_degree || 50}` : '-'}
                             </span>
                           </div>
                         </div>

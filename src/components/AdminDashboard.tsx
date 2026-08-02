@@ -456,7 +456,18 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     try {
       // 1. Fetch Students
       const studentSnap = await getDocs(collection(db, 'students'));
-      const sList = studentSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const sList = studentSnap.docs.map(docSnap => {
+        const data = docSnap.data();
+        const rawCode = data.code ? String(data.code) : '';
+        const cleanCode = rawCode.replace(/\D/g, '') || rawCode;
+
+        // Auto-update Firestore if code contains non-digit letters
+        if (/\D/.test(rawCode) && cleanCode) {
+          updateDoc(doc(db, 'students', docSnap.id), { code: cleanCode }).catch(() => {});
+        }
+
+        return { id: docSnap.id, ...data, code: cleanCode };
+      });
       setStudents(sList);
 
       // Fetch Center Groups

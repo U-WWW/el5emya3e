@@ -51,7 +51,7 @@ const COLOR_PALETTE = [
 
 export default function EducationalGames({
   studentName = 'الطالب المميز',
-  studentCode = 'STU-101',
+  studentCode = '1001',
   studentId = '',
   onNavigateHome,
   onNavigateResults,

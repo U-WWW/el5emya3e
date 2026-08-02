@@ -51,13 +51,15 @@ import {
   CheckCircle2,
   XCircle,
   Eye,
-  AlertTriangle
+  AlertTriangle,
+  Download
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import CryptoJS from 'crypto-js';
 import VideoPlayerModal from './VideoPlayerModal';
 import EducationalGames from './EducationalGames';
 import AlchemiyaStudentDashboard from './AlchemiyaStudentDashboard';
+import { isAndroidWebView } from './AppDownloadPrompt';
 
 const SECRET_KEY = "JamalAcademy_Secret_2026";
 
@@ -523,6 +525,11 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
     const savedStudent = localStorage.getItem('jamal_student');
     if (savedStudent) {
       const parsed = JSON.parse(savedStudent);
+      const cleanCode = parsed.code ? String(parsed.code).replace(/\D/g, '') || parsed.code : '';
+      if (cleanCode && cleanCode !== parsed.code) {
+        parsed.code = cleanCode;
+        localStorage.setItem('jamal_student', JSON.stringify(parsed));
+      }
       setStudent(parsed);
       setSelectedAvatar(parsed.avatar || 'spiderman');
       fetchStudentData(parsed.code, parsed.className);
@@ -615,9 +622,13 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
   const fetchStudentData = async (code: string, className: string) => {
     setLoading(true);
     try {
+      const cleanCode = code ? String(code).replace(/\D/g, '') || code : code;
+
       // Check if student is banned first
-      const studentQuery = query(collection(db, 'students'), where('code', '==', code));
-      const studentSnap = await getDocs(studentQuery);
+      let studentSnap = await getDocs(query(collection(db, 'students'), where('code', '==', cleanCode)));
+      if (studentSnap.empty && cleanCode !== code) {
+        studentSnap = await getDocs(query(collection(db, 'students'), where('code', '==', code)));
+      }
       if (!studentSnap.empty) {
         const data = studentSnap.docs[0].data();
         if (data.is_banned) {
@@ -639,9 +650,17 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
       const vList = vSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setVideos(vList);
 
-      // Fetch student's past results
-      const rSnap = await getDocs(query(collection(db, 'results'), where('student_code', '==', code)));
-      const rList = rSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // Fetch student's past results (matching both clean numeric code and legacy prefix codes)
+      const rSnapAll = await getDocs(collection(db, 'results'));
+      const rList = rSnapAll.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter((r: any) => {
+          if (!r.student_code) return false;
+          if (r.student_code === cleanCode || r.student_code === code) return true;
+          const rClean = String(r.student_code).replace(/\D/g, '');
+          return rClean === cleanCode && rClean.length > 0;
+        });
+
       setStudentResults(rList);
 
       // Calculate total points
@@ -649,7 +668,8 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
       
       // Update local storage and student state with real cumulative score
       setStudent((prev: any) => {
-        const updated = { ...prev, totalScore: totalPoints };
+        if (!prev) return null;
+        const updated = { ...prev, code: cleanCode, totalScore: totalPoints };
         localStorage.setItem('jamal_student', JSON.stringify(updated));
         return updated;
       });
@@ -662,10 +682,10 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
   };
 
   const generateUniqueCode = async () => {
-    // Attempt to generate a unique 4-digit code up to 5 times
+    // Attempt to generate a unique 5-digit numeric code up to 5 times
     for (let i = 0; i < 5; i++) {
-      const randomNum = Math.floor(1000 + Math.random() * 9000);
-      const code = `AG-${randomNum}`;
+      const randomNum = Math.floor(10000 + Math.random() * 90000);
+      const code = `${randomNum}`;
       
       const q = query(collection(db, 'students'), where('code', '==', code));
       const snap = await getDocs(q);
@@ -674,7 +694,7 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
       }
     }
     // Fallback
-    return `AG-${Math.floor(10000 + Math.random() * 90000)}`;
+    return `${Math.floor(10000 + Math.random() * 90000)}`;
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -690,9 +710,30 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
     }
 
     try {
-      const formattedCode = code.trim().toUpperCase();
-      const studentQuery = query(collection(db, 'students'), where('code', '==', formattedCode));
-      const studentSnap = await getDocs(studentQuery);
+      const rawCode = code.trim();
+      const formattedCode = rawCode.toUpperCase();
+      const cleanNumericCode = rawCode.replace(/\D/g, '');
+
+      // Search student by exact formatted code or clean numeric code
+      let studentSnap = await getDocs(query(collection(db, 'students'), where('code', '==', formattedCode)));
+      
+      if (studentSnap.empty && cleanNumericCode) {
+        studentSnap = await getDocs(query(collection(db, 'students'), where('code', '==', cleanNumericCode)));
+      }
+
+      // If still empty, scan all student documents for numeric digit match
+      if (studentSnap.empty && cleanNumericCode) {
+        const allStudentsSnap = await getDocs(collection(db, 'students'));
+        const matchedDoc = allStudentsSnap.docs.find(d => {
+          const docData = d.data();
+          const docCodeClean = docData.code ? String(docData.code).replace(/\D/g, '') : '';
+          return docCodeClean === cleanNumericCode && cleanNumericCode.length > 0;
+        });
+
+        if (matchedDoc) {
+          studentSnap = { empty: false, docs: [matchedDoc] } as any;
+        }
+      }
 
       if (studentSnap.empty) {
         setLoginError('عذراً يا بطل! كود الطالب المدخل غير مسجل بالأكاديمية. يرجى مراجعته أو تسجيل حساب جديد.');
@@ -702,6 +743,17 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
 
       const studentDoc = studentSnap.docs[0];
       const data = studentDoc.data();
+      const dbCode = data.code ? String(data.code) : '';
+      const finalCleanCode = cleanNumericCode || dbCode.replace(/\D/g, '') || dbCode;
+
+      // Auto-migrate legacy student code in Firestore to numbers-only
+      if (/\D/.test(dbCode) && finalCleanCode) {
+        try {
+          await updateDoc(doc(db, 'students', studentDoc.id), { code: finalCleanCode });
+        } catch (e) {
+          console.warn('Auto-migrating student code error:', e);
+        }
+      }
 
       if (data.is_banned) {
         setLoginError('🚨 عذراً، تم حظر هذا الحساب من المنصة نهائياً بسبب استخدام كلمات بذيئة وغير لائقة! يرجى مراجعة الأستاذ الخيميائي.');
@@ -716,7 +768,7 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
           const savedData = { 
             id: studentDoc.id, 
             name: data.name,
-            code: data.code,
+            code: finalCleanCode,
             phone: data.phone,
             className: data.class_name, 
             groupName: data.group_name,
@@ -735,7 +787,8 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
         // Legacy student with no password. Trigger password setup upgrade.
         setLegacyStudentNeedPassword({
           id: studentDoc.id,
-          ...data
+          ...data,
+          code: finalCleanCode
         });
       }
 
@@ -1165,7 +1218,7 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
                   <input
                     type="text"
                     required
-                    placeholder="مثال: AM-3849"
+                    placeholder="مثال: 58392"
                     className="w-full bg-stone-900 border border-stone-700 focus:border-cyan-400 text-stone-100 uppercase rounded-xl p-4 font-mono font-bold outline-none transition text-right"
                     value={loginForm.code}
                     onChange={e => setLoginForm(prev => ({ ...prev, code: e.target.value }))}
@@ -1342,6 +1395,23 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
           )}
 
         </div>
+
+        {/* Optional APK Download Link for Web Browsers */}
+        {!isAndroidWebView() && (
+          <div className="mt-6 text-center z-10 relative">
+            <a
+              href="https://github.com/U-WWW/el5emya2e-apk/releases/download/apk/default.apk"
+              target="_blank"
+              rel="noopener noreferrer"
+              download="Elkhemiaey.apk"
+              className="inline-flex items-center gap-2.5 bg-stone-900/90 hover:bg-stone-800 border border-cyan-500/40 text-cyan-300 hover:text-cyan-200 px-5 py-3 rounded-2xl shadow-xl backdrop-blur-md transition-all duration-300 transform hover:scale-105 active:scale-95 font-bold text-xs sm:text-sm"
+            >
+              <Smartphone className="w-5 h-5 text-cyan-400 animate-pulse" />
+              <span>تحميل تطبيق الأندرويد الرسمي (APK)</span>
+              <Download className="w-4 h-4 text-emerald-400" />
+            </a>
+          </div>
+        )}
 
         {/* CELEBRATORY REGISTER SUCCESS MODAL */}
         <AnimatePresence>

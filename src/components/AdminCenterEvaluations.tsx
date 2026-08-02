@@ -35,7 +35,8 @@ import {
   BookOpen,
   ChevronDown,
   ShieldAlert,
-  Clock
+  Clock,
+  Sliders
 } from 'lucide-react';
 
 const CLASSES_LIST = [
@@ -93,6 +94,12 @@ export default function AdminCenterEvaluations() {
   const [bulkSessionNum, setBulkSessionNum] = useState<number | string>(1);
   const [isCompExam, setIsCompExam] = useState<boolean>(false);
   
+  // Custom Max Degrees per session
+  const [bulkMaxHomework, setBulkMaxHomework] = useState<number | string>(10);
+  const [bulkMaxRecitation, setBulkMaxRecitation] = useState<number | string>(10);
+  const [bulkMaxExam, setBulkMaxExam] = useState<number | string>(20);
+  const [bulkMaxCompExam, setBulkMaxCompExam] = useState<number | string>(50);
+
   // Local state for table evaluation entries
   // Structure: { [studentCode]: { absent: boolean, homework: number, recitation: number, exam: number, compExam: number } }
   const [bulkEntries, setBulkEntries] = useState<{ [key: string]: any }>({});
@@ -118,9 +125,13 @@ export default function AdminCenterEvaluations() {
     lesson_number: 1,
     attendance: 'حضر',
     homework_degree: 0,
+    max_homework_degree: 10,
     recitation_degree: 0,
+    max_recitation_degree: 10,
     exam_degree: 0,
-    comprehensive_exam_degree: '' as any
+    max_exam_degree: 20,
+    comprehensive_exam_degree: '' as any,
+    max_comprehensive_exam_degree: 50
   });
   const [isAddingSingleRecord, setIsAddingSingleRecord] = useState<boolean>(false);
 
@@ -330,9 +341,13 @@ export default function AdminCenterEvaluations() {
           lesson_number: Number(bulkSessionNum) || 1,
           attendance: isAbsent ? 'غاب' : 'حضر',
           homework_degree: isAbsent ? 0 : (Number(entry.homework) || 0),
+          max_homework_degree: Number(bulkMaxHomework) || 10,
           recitation_degree: isAbsent ? 0 : (Number(entry.recitation) || 0),
+          max_recitation_degree: Number(bulkMaxRecitation) || 10,
           exam_degree: isAbsent ? 0 : (Number(entry.exam) || 0),
+          max_exam_degree: Number(bulkMaxExam) || 20,
           comprehensive_exam_degree: isAbsent ? 0 : (isCompExam ? (Number(entry.compExam) || 0) : null),
+          max_comprehensive_exam_degree: isCompExam ? (Number(bulkMaxCompExam) || 50) : null,
           createdAt: new Date().toISOString()
         });
       });
@@ -399,9 +414,13 @@ export default function AdminCenterEvaluations() {
         lesson_number: Number(bulkSessionNum) || 1,
         attendance: isAbsent ? 'غاب' : 'حضر',
         homework_degree: isAbsent ? 0 : (Number(entry.homework) || 0),
+        max_homework_degree: Number(bulkMaxHomework) || 10,
         recitation_degree: isAbsent ? 0 : (Number(entry.recitation) || 0),
+        max_recitation_degree: Number(bulkMaxRecitation) || 10,
         exam_degree: isAbsent ? 0 : (Number(entry.exam) || 0),
+        max_exam_degree: Number(bulkMaxExam) || 20,
         comprehensive_exam_degree: isAbsent ? 0 : (isCompExam ? (Number(entry.compExam) || 0) : null),
+        max_comprehensive_exam_degree: isCompExam ? (Number(bulkMaxCompExam) || 50) : null,
         createdAt: new Date().toISOString()
       });
       alert(`✅ تم حفظ تقييم الطالب (${student.name}) بنجاح!`);
@@ -430,9 +449,13 @@ export default function AdminCenterEvaluations() {
         lesson_number: Number(newSingleRecord.lesson_number) || 1,
         attendance: newSingleRecord.attendance,
         homework_degree: isAbsent ? 0 : (Number(newSingleRecord.homework_degree) || 0),
+        max_homework_degree: Number(newSingleRecord.max_homework_degree) || 10,
         recitation_degree: isAbsent ? 0 : (Number(newSingleRecord.recitation_degree) || 0),
+        max_recitation_degree: Number(newSingleRecord.max_recitation_degree) || 10,
         exam_degree: isAbsent ? 0 : (Number(newSingleRecord.exam_degree) || 0),
+        max_exam_degree: Number(newSingleRecord.max_exam_degree) || 20,
         comprehensive_exam_degree: isAbsent ? 0 : (newSingleRecord.comprehensive_exam_degree !== '' ? (Number(newSingleRecord.comprehensive_exam_degree) || 0) : null),
+        max_comprehensive_exam_degree: newSingleRecord.comprehensive_exam_degree !== '' ? (Number(newSingleRecord.max_comprehensive_exam_degree) || 50) : null,
         createdAt: new Date().toISOString()
       });
       alert(`✅ تم إضافة التقييم الفردي للطالب (${selectedStudentForHistory.name}) بنجاح!`);
@@ -455,9 +478,13 @@ export default function AdminCenterEvaluations() {
       await updateDoc(doc(db, 'center_records', editingRecord.id), {
         attendance: editingRecord.attendance,
         homework_degree: isAbsent ? 0 : (Number(editingRecord.homework_degree) || 0),
+        max_homework_degree: Number(editingRecord.max_homework_degree) || 10,
         recitation_degree: isAbsent ? 0 : (Number(editingRecord.recitation_degree) || 0),
+        max_recitation_degree: Number(editingRecord.max_recitation_degree) || 10,
         exam_degree: isAbsent ? 0 : (Number(editingRecord.exam_degree) || 0),
+        max_exam_degree: Number(editingRecord.max_exam_degree) || 20,
         comprehensive_exam_degree: isAbsent ? 0 : (editingRecord.comprehensive_exam_degree !== null && editingRecord.comprehensive_exam_degree !== '' ? (Number(editingRecord.comprehensive_exam_degree) || 0) : null),
+        max_comprehensive_exam_degree: editingRecord.comprehensive_exam_degree !== null && editingRecord.comprehensive_exam_degree !== '' ? (Number(editingRecord.max_comprehensive_exam_degree) || 50) : null,
         lesson_number: Number(editingRecord.lesson_number) || 1,
         lesson_month: editingRecord.lesson_month || activeMonth,
         lesson_date: editingRecord.lesson_date || new Date().toISOString().split('T')[0],
@@ -510,17 +537,23 @@ export default function AdminCenterEvaluations() {
       msg += `\n`;
 
       if (lastRecord) {
+        const maxHw = lastRecord.max_homework_degree || 10;
+        const maxRec = lastRecord.max_recitation_degree || 10;
+        const maxEx = lastRecord.max_exam_degree || 20;
+        const maxComp = lastRecord.max_comprehensive_exam_degree || 50;
+
         msg += `📝 *بيانات تقييم أحدث حصة (${lastRecord.lesson_date || 'غير محدد'} - حصة رقم ${lastRecord.lesson_number || 1}):*\n`;
         msg += `• 👤 *الحالة:* ${lastRecord.attendance === 'حضر' ? '✅ حضر' : '❌ غاب'}\n`;
         if (lastRecord.attendance === 'حضر') {
-          msg += `• 📚 *درجة الواجب:* ${lastRecord.homework_degree ?? 0}\n`;
-          msg += `• 🗣️ *درجة التسميع:* ${lastRecord.recitation_degree ?? 0}\n`;
-          msg += `• ✍️ *درجة الامتحان:* ${lastRecord.exam_degree ?? 0}\n`;
+          msg += `• 📚 *درجة الواجب:* ${lastRecord.homework_degree ?? 0} / ${maxHw}\n`;
+          msg += `• 🗣️ *درجة التسميع:* ${lastRecord.recitation_degree ?? 0} / ${maxRec}\n`;
+          msg += `• ✍️ *درجة الامتحان:* ${lastRecord.exam_degree ?? 0} / ${maxEx}\n`;
           if (lastRecord.comprehensive_exam_degree !== null && lastRecord.comprehensive_exam_degree !== undefined && lastRecord.comprehensive_exam_degree !== '') {
-            msg += `• 🌟 *الامتحان الشامل:* ${lastRecord.comprehensive_exam_degree}\n`;
+            msg += `• 🌟 *الامتحان الشامل:* ${lastRecord.comprehensive_exam_degree} / ${maxComp}\n`;
           }
           const sessionTotal = (Number(lastRecord.homework_degree) || 0) + (Number(lastRecord.recitation_degree) || 0) + (Number(lastRecord.exam_degree) || 0) + (Number(lastRecord.comprehensive_exam_degree) || 0);
-          msg += `• 🎯 *مجموع تقييم الحصة:* ${sessionTotal}\n`;
+          const sessionMaxTotal = maxHw + maxRec + maxEx + (lastRecord.comprehensive_exam_degree ? maxComp : 0);
+          msg += `• 🎯 *مجموع تقييم الحصة:* ${sessionTotal} / ${sessionMaxTotal}\n`;
         }
       } else {
         msg += `⚠️ *لم يتم تسجيل تقييمات سابقة للطالب بعد.*\n`;
@@ -795,6 +828,54 @@ export default function AdminCenterEvaluations() {
           </div>
         </div>
 
+        {/* Custom Max Degrees Controls Bar */}
+        <div className="bg-stone-950/80 border border-amber-500/20 p-3.5 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-1.5 font-bold text-amber-400">
+            <Sliders className="w-4 h-4" />
+            <span>تخصيص الدرجات النهائية (العظمى) لهذه الحصة:</span>
+          </div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-1.5 bg-stone-900 border border-stone-700 px-2.5 py-1 rounded-xl">
+              <span className="text-cyan-300 font-bold">واجب:</span>
+              <input
+                type="number"
+                value={bulkMaxHomework}
+                onChange={(e) => setBulkMaxHomework(e.target.value)}
+                className="w-12 bg-transparent text-center font-bold text-white outline-none font-mono"
+              />
+            </div>
+            <div className="flex items-center gap-1.5 bg-stone-900 border border-stone-700 px-2.5 py-1 rounded-xl">
+              <span className="text-indigo-300 font-bold">تسميع:</span>
+              <input
+                type="number"
+                value={bulkMaxRecitation}
+                onChange={(e) => setBulkMaxRecitation(e.target.value)}
+                className="w-12 bg-transparent text-center font-bold text-white outline-none font-mono"
+              />
+            </div>
+            <div className="flex items-center gap-1.5 bg-stone-900 border border-stone-700 px-2.5 py-1 rounded-xl">
+              <span className="text-amber-300 font-bold">امتحان:</span>
+              <input
+                type="number"
+                value={bulkMaxExam}
+                onChange={(e) => setBulkMaxExam(e.target.value)}
+                className="w-12 bg-transparent text-center font-bold text-white outline-none font-mono"
+              />
+            </div>
+            {isCompExam && (
+              <div className="flex items-center gap-1.5 bg-amber-950/60 border border-amber-600/50 px-2.5 py-1 rounded-xl">
+                <span className="text-amber-400 font-bold">شامل:</span>
+                <input
+                  type="number"
+                  value={bulkMaxCompExam}
+                  onChange={(e) => setBulkMaxCompExam(e.target.value)}
+                  className="w-12 bg-transparent text-center font-bold text-amber-300 outline-none font-mono"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Student Evaluation Rows */}
         {filteredStudentsForBulk.length === 0 ? (
           <div className="p-12 text-center bg-stone-950/60 rounded-2xl border border-dashed border-stone-800 space-y-2">
@@ -811,10 +892,10 @@ export default function AdminCenterEvaluations() {
                   <th className="p-3">اسم الطالب</th>
                   <th className="p-3">المجموعة</th>
                   <th className="p-3 text-center text-rose-400">تسجيل غياب ❌</th>
-                  <th className="p-3 text-center">درجة الواجب (10)</th>
-                  <th className="p-3 text-center">درجة التسميع (10)</th>
-                  <th className="p-3 text-center">امتحان الحصة (20)</th>
-                  {isCompExam && <th className="p-3 text-center text-amber-400">الامتحان الشامل (50)</th>}
+                  <th className="p-3 text-center">درجة الواجب ({bulkMaxHomework})</th>
+                  <th className="p-3 text-center">درجة التسميع ({bulkMaxRecitation})</th>
+                  <th className="p-3 text-center">امتحان الحصة ({bulkMaxExam})</th>
+                  {isCompExam && <th className="p-3 text-center text-amber-400">الامتحان الشامل ({bulkMaxCompExam})</th>}
                   <th className="p-3 text-center">السجل والمتابعة</th>
                 </tr>
               </thead>
@@ -1214,18 +1295,26 @@ export default function AdminCenterEvaluations() {
                         </span>
                       </div>
                       {rec.attendance === 'حضر' && (
-                        <div className="flex gap-3 text-[11px] text-stone-300 font-mono mt-1">
-                          <span>واجب: {rec.homework_degree}/10</span>
-                          <span>تسميع: {rec.recitation_degree}/10</span>
-                          <span>امتحان: {rec.exam_degree}/20</span>
-                          {rec.comprehensive_exam_degree && <span>شامل: {rec.comprehensive_exam_degree}/50</span>}
+                        <div className="flex flex-wrap gap-3 text-[11px] text-stone-300 font-mono mt-1">
+                          <span>واجب: {rec.homework_degree}/{rec.max_homework_degree || 10}</span>
+                          <span>تسميع: {rec.recitation_degree}/{rec.max_recitation_degree || 10}</span>
+                          <span>امتحان: {rec.exam_degree}/{rec.max_exam_degree || 20}</span>
+                          {rec.comprehensive_exam_degree !== null && rec.comprehensive_exam_degree !== undefined && rec.comprehensive_exam_degree !== '' && (
+                            <span>شامل: {rec.comprehensive_exam_degree}/{rec.max_comprehensive_exam_degree || 50}</span>
+                          )}
                         </div>
                       )}
                     </div>
 
                     <div className="flex items-center gap-1.5">
                       <button
-                        onClick={() => setEditingRecord(rec)}
+                        onClick={() => setEditingRecord({
+                          ...rec,
+                          max_homework_degree: rec.max_homework_degree || 10,
+                          max_recitation_degree: rec.max_recitation_degree || 10,
+                          max_exam_degree: rec.max_exam_degree || 20,
+                          max_comprehensive_exam_degree: rec.max_comprehensive_exam_degree || 50
+                        })}
                         className="px-2.5 py-1 text-amber-400 bg-amber-950/60 hover:bg-amber-900/80 border border-amber-800/80 rounded-xl transition flex items-center gap-1 text-[11px] font-bold"
                         title="تعديل هذا التقييم الفردي"
                       >
@@ -1314,46 +1403,97 @@ export default function AdminCenterEvaluations() {
             </div>
 
             {editingRecord.attendance === 'حضر' && (
-              <div className="grid grid-cols-2 gap-3 pt-2 text-xs">
-                <div>
-                  <label className="block text-cyan-300 font-bold mb-1">درجة الواجب (10)</label>
-                  <input
-                    type="number"
-                    value={editingRecord.homework_degree ?? 0}
-                    onChange={(e) => setEditingRecord({ ...editingRecord, homework_degree: e.target.value })}
-                    className="w-full bg-stone-950 border border-stone-700 rounded-xl p-2.5 font-bold text-cyan-300 outline-none focus:border-cyan-500 font-mono"
-                  />
+              <div className="space-y-3 pt-2 text-xs">
+                <div className="p-3 bg-stone-950 border border-stone-800 rounded-2xl space-y-2">
+                  <div className="flex justify-between items-center text-cyan-300 font-bold">
+                    <span>درجة الواجب</span>
+                    <span className="text-[11px] text-stone-400">الدرجة المكتسبة / الدرجة النهائية</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="number"
+                      placeholder="درجة الطالب"
+                      value={editingRecord.homework_degree ?? 0}
+                      onChange={(e) => setEditingRecord({ ...editingRecord, homework_degree: e.target.value })}
+                      className="w-full bg-stone-900 border border-stone-700 rounded-xl p-2 font-bold text-cyan-300 outline-none focus:border-cyan-500 font-mono text-center"
+                    />
+                    <input
+                      type="number"
+                      placeholder="الدرجة العظمى (مثلاً 10)"
+                      value={editingRecord.max_homework_degree ?? 10}
+                      onChange={(e) => setEditingRecord({ ...editingRecord, max_homework_degree: e.target.value })}
+                      className="w-full bg-stone-900 border border-stone-700 rounded-xl p-2 font-bold text-stone-300 outline-none focus:border-cyan-500 font-mono text-center"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-indigo-300 font-bold mb-1">درجة التسميع (10)</label>
-                  <input
-                    type="number"
-                    value={editingRecord.recitation_degree ?? 0}
-                    onChange={(e) => setEditingRecord({ ...editingRecord, recitation_degree: e.target.value })}
-                    className="w-full bg-stone-950 border border-stone-700 rounded-xl p-2.5 font-bold text-indigo-300 outline-none focus:border-indigo-500 font-mono"
-                  />
+                <div className="p-3 bg-stone-950 border border-stone-800 rounded-2xl space-y-2">
+                  <div className="flex justify-between items-center text-indigo-300 font-bold">
+                    <span>درجة التسميع</span>
+                    <span className="text-[11px] text-stone-400">الدرجة المكتسبة / الدرجة النهائية</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="number"
+                      placeholder="درجة الطالب"
+                      value={editingRecord.recitation_degree ?? 0}
+                      onChange={(e) => setEditingRecord({ ...editingRecord, recitation_degree: e.target.value })}
+                      className="w-full bg-stone-900 border border-stone-700 rounded-xl p-2 font-bold text-indigo-300 outline-none focus:border-indigo-500 font-mono text-center"
+                    />
+                    <input
+                      type="number"
+                      placeholder="الدرجة العظمى (مثلاً 10)"
+                      value={editingRecord.max_recitation_degree ?? 10}
+                      onChange={(e) => setEditingRecord({ ...editingRecord, max_recitation_degree: e.target.value })}
+                      className="w-full bg-stone-900 border border-stone-700 rounded-xl p-2 font-bold text-stone-300 outline-none focus:border-indigo-500 font-mono text-center"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-amber-300 font-bold mb-1">درجة الامتحان (20)</label>
-                  <input
-                    type="number"
-                    value={editingRecord.exam_degree ?? 0}
-                    onChange={(e) => setEditingRecord({ ...editingRecord, exam_degree: e.target.value })}
-                    className="w-full bg-stone-950 border border-stone-700 rounded-xl p-2.5 font-bold text-amber-300 outline-none focus:border-amber-500 font-mono"
-                  />
+                <div className="p-3 bg-stone-950 border border-stone-800 rounded-2xl space-y-2">
+                  <div className="flex justify-between items-center text-amber-300 font-bold">
+                    <span>درجة الامتحان</span>
+                    <span className="text-[11px] text-stone-400">الدرجة المكتسبة / الدرجة النهائية</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="number"
+                      placeholder="درجة الطالب"
+                      value={editingRecord.exam_degree ?? 0}
+                      onChange={(e) => setEditingRecord({ ...editingRecord, exam_degree: e.target.value })}
+                      className="w-full bg-stone-900 border border-stone-700 rounded-xl p-2 font-bold text-amber-300 outline-none focus:border-amber-500 font-mono text-center"
+                    />
+                    <input
+                      type="number"
+                      placeholder="الدرجة العظمى (مثلاً 20)"
+                      value={editingRecord.max_exam_degree ?? 20}
+                      onChange={(e) => setEditingRecord({ ...editingRecord, max_exam_degree: e.target.value })}
+                      className="w-full bg-stone-900 border border-stone-700 rounded-xl p-2 font-bold text-stone-300 outline-none focus:border-amber-500 font-mono text-center"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-amber-400 font-bold mb-1">الامتحان الشامل (اختياري / 50)</label>
-                  <input
-                    type="number"
-                    placeholder="0-50"
-                    value={editingRecord.comprehensive_exam_degree ?? ''}
-                    onChange={(e) => setEditingRecord({ ...editingRecord, comprehensive_exam_degree: e.target.value })}
-                    className="w-full bg-amber-950/40 border border-amber-800 rounded-xl p-2.5 font-bold text-amber-300 outline-none focus:border-amber-400 font-mono"
-                  />
+                <div className="p-3 bg-amber-950/30 border border-amber-800/60 rounded-2xl space-y-2">
+                  <div className="flex justify-between items-center text-amber-400 font-bold">
+                    <span>الامتحان الشامل (اختياري)</span>
+                    <span className="text-[11px] text-amber-300/70">الدرجة المكتسبة / الدرجة النهائية</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="number"
+                      placeholder="درجة الطالب (أو اتركه فارغاً)"
+                      value={editingRecord.comprehensive_exam_degree ?? ''}
+                      onChange={(e) => setEditingRecord({ ...editingRecord, comprehensive_exam_degree: e.target.value })}
+                      className="w-full bg-stone-900 border border-amber-700/60 rounded-xl p-2 font-bold text-amber-300 outline-none focus:border-amber-400 font-mono text-center"
+                    />
+                    <input
+                      type="number"
+                      placeholder="الدرجة العظمى (مثلاً 50)"
+                      value={editingRecord.max_comprehensive_exam_degree ?? 50}
+                      onChange={(e) => setEditingRecord({ ...editingRecord, max_comprehensive_exam_degree: e.target.value })}
+                      className="w-full bg-stone-900 border border-amber-700/60 rounded-xl p-2 font-bold text-stone-300 outline-none focus:border-amber-400 font-mono text-center"
+                    />
+                  </div>
                 </div>
               </div>
             )}
@@ -1444,46 +1584,97 @@ export default function AdminCenterEvaluations() {
             </div>
 
             {newSingleRecord.attendance === 'حضر' && (
-              <div className="grid grid-cols-2 gap-3 pt-2 text-xs">
-                <div>
-                  <label className="block text-cyan-300 font-bold mb-1">درجة الواجب (10)</label>
-                  <input
-                    type="number"
-                    value={newSingleRecord.homework_degree}
-                    onChange={(e) => setNewSingleRecord({ ...newSingleRecord, homework_degree: Number(e.target.value) })}
-                    className="w-full bg-stone-950 border border-stone-700 rounded-xl p-2.5 font-bold text-cyan-300 outline-none focus:border-cyan-500 font-mono"
-                  />
+              <div className="space-y-3 pt-2 text-xs">
+                <div className="p-3 bg-stone-950 border border-stone-800 rounded-2xl space-y-2">
+                  <div className="flex justify-between items-center text-cyan-300 font-bold">
+                    <span>درجة الواجب</span>
+                    <span className="text-[11px] text-stone-400">الدرجة المكتسبة / الدرجة النهائية</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="number"
+                      placeholder="درجة الطالب"
+                      value={newSingleRecord.homework_degree}
+                      onChange={(e) => setNewSingleRecord({ ...newSingleRecord, homework_degree: Number(e.target.value) })}
+                      className="w-full bg-stone-900 border border-stone-700 rounded-xl p-2 font-bold text-cyan-300 outline-none focus:border-cyan-500 font-mono text-center"
+                    />
+                    <input
+                      type="number"
+                      placeholder="الدرجة العظمى (مثلاً 10)"
+                      value={newSingleRecord.max_homework_degree}
+                      onChange={(e) => setNewSingleRecord({ ...newSingleRecord, max_homework_degree: Number(e.target.value) })}
+                      className="w-full bg-stone-900 border border-stone-700 rounded-xl p-2 font-bold text-stone-300 outline-none focus:border-cyan-500 font-mono text-center"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-indigo-300 font-bold mb-1">درجة التسميع (10)</label>
-                  <input
-                    type="number"
-                    value={newSingleRecord.recitation_degree}
-                    onChange={(e) => setNewSingleRecord({ ...newSingleRecord, recitation_degree: Number(e.target.value) })}
-                    className="w-full bg-stone-950 border border-stone-700 rounded-xl p-2.5 font-bold text-indigo-300 outline-none focus:border-indigo-500 font-mono"
-                  />
+                <div className="p-3 bg-stone-950 border border-stone-800 rounded-2xl space-y-2">
+                  <div className="flex justify-between items-center text-indigo-300 font-bold">
+                    <span>درجة التسميع</span>
+                    <span className="text-[11px] text-stone-400">الدرجة المكتسبة / الدرجة النهائية</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="number"
+                      placeholder="درجة الطالب"
+                      value={newSingleRecord.recitation_degree}
+                      onChange={(e) => setNewSingleRecord({ ...newSingleRecord, recitation_degree: Number(e.target.value) })}
+                      className="w-full bg-stone-900 border border-stone-700 rounded-xl p-2 font-bold text-indigo-300 outline-none focus:border-indigo-500 font-mono text-center"
+                    />
+                    <input
+                      type="number"
+                      placeholder="الدرجة العظمى (مثلاً 10)"
+                      value={newSingleRecord.max_recitation_degree}
+                      onChange={(e) => setNewSingleRecord({ ...newSingleRecord, max_recitation_degree: Number(e.target.value) })}
+                      className="w-full bg-stone-900 border border-stone-700 rounded-xl p-2 font-bold text-stone-300 outline-none focus:border-indigo-500 font-mono text-center"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-amber-300 font-bold mb-1">درجة الامتحان (20)</label>
-                  <input
-                    type="number"
-                    value={newSingleRecord.exam_degree}
-                    onChange={(e) => setNewSingleRecord({ ...newSingleRecord, exam_degree: Number(e.target.value) })}
-                    className="w-full bg-stone-950 border border-stone-700 rounded-xl p-2.5 font-bold text-amber-300 outline-none focus:border-amber-500 font-mono"
-                  />
+                <div className="p-3 bg-stone-950 border border-stone-800 rounded-2xl space-y-2">
+                  <div className="flex justify-between items-center text-amber-300 font-bold">
+                    <span>درجة الامتحان</span>
+                    <span className="text-[11px] text-stone-400">الدرجة المكتسبة / الدرجة النهائية</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="number"
+                      placeholder="درجة الطالب"
+                      value={newSingleRecord.exam_degree}
+                      onChange={(e) => setNewSingleRecord({ ...newSingleRecord, exam_degree: Number(e.target.value) })}
+                      className="w-full bg-stone-900 border border-stone-700 rounded-xl p-2 font-bold text-amber-300 outline-none focus:border-amber-500 font-mono text-center"
+                    />
+                    <input
+                      type="number"
+                      placeholder="الدرجة العظمى (مثلاً 20)"
+                      value={newSingleRecord.max_exam_degree}
+                      onChange={(e) => setNewSingleRecord({ ...newSingleRecord, max_exam_degree: Number(e.target.value) })}
+                      className="w-full bg-stone-900 border border-stone-700 rounded-xl p-2 font-bold text-stone-300 outline-none focus:border-amber-500 font-mono text-center"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-amber-400 font-bold mb-1">الامتحان الشامل (اختياري / 50)</label>
-                  <input
-                    type="number"
-                    placeholder="0-50"
-                    value={newSingleRecord.comprehensive_exam_degree}
-                    onChange={(e) => setNewSingleRecord({ ...newSingleRecord, comprehensive_exam_degree: e.target.value })}
-                    className="w-full bg-amber-950/40 border border-amber-800 rounded-xl p-2.5 font-bold text-amber-300 outline-none focus:border-amber-400 font-mono"
-                  />
+                <div className="p-3 bg-amber-950/30 border border-amber-800/60 rounded-2xl space-y-2">
+                  <div className="flex justify-between items-center text-amber-400 font-bold">
+                    <span>الامتحان الشامل (اختياري)</span>
+                    <span className="text-[11px] text-amber-300/70">الدرجة المكتسبة / الدرجة النهائية</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="number"
+                      placeholder="درجة الطالب (أو اتركه فارغاً)"
+                      value={newSingleRecord.comprehensive_exam_degree}
+                      onChange={(e) => setNewSingleRecord({ ...newSingleRecord, comprehensive_exam_degree: e.target.value })}
+                      className="w-full bg-stone-900 border border-amber-700/60 rounded-xl p-2 font-bold text-amber-300 outline-none focus:border-amber-400 font-mono text-center"
+                    />
+                    <input
+                      type="number"
+                      placeholder="الدرجة العظمى (مثلاً 50)"
+                      value={newSingleRecord.max_comprehensive_exam_degree}
+                      onChange={(e) => setNewSingleRecord({ ...newSingleRecord, max_comprehensive_exam_degree: Number(e.target.value) })}
+                      className="w-full bg-stone-900 border border-amber-700/60 rounded-xl p-2 font-bold text-stone-300 outline-none focus:border-amber-400 font-mono text-center"
+                    />
+                  </div>
                 </div>
               </div>
             )}
