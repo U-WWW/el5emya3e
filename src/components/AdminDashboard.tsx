@@ -627,34 +627,39 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const handleSetStudentBanType = async (type: 'chat' | 'platform' | 'unban') => {
     if (!selectedStudentForAction) return;
 
-    const { code, name } = selectedStudentForAction;
+    const { id, code, name } = selectedStudentForAction;
     try {
-      // Find student in students collection
-      const q = query(collection(db, 'students'), where('code', '==', code));
-      const snap = await getDocs(q);
+      let studentDocRef = null;
+      if (id) {
+        studentDocRef = doc(db, 'students', id);
+      } else if (code) {
+        const q = query(collection(db, 'students'), where('code', '==', code));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          studentDocRef = doc(db, 'students', snap.docs[0].id);
+        }
+      }
 
-      if (snap.empty) {
+      if (!studentDocRef) {
         setChatToastNotice("لم يتم العثور على سجل الطالب في قاعدة البيانات.");
         setTimeout(() => setChatToastNotice(null), 4000);
         return;
       }
 
-      const studentDoc = snap.docs[0];
-
       if (type === 'chat') {
-        await updateDoc(doc(db, 'students', studentDoc.id), {
+        await updateDoc(studentDocRef, {
           is_chat_banned: true,
           is_banned: false
         });
         setChatToastNotice(`تم حظر الطالب (${name}) من إرسال الرسائل في الشات فقط!`);
       } else if (type === 'platform') {
-        await updateDoc(doc(db, 'students', studentDoc.id), {
+        await updateDoc(studentDocRef, {
           is_banned: true,
           is_chat_banned: true
         });
         setChatToastNotice(`تم حظر الطالب (${name}) بالكامل من المنصة!`);
       } else if (type === 'unban') {
-        await updateDoc(doc(db, 'students', studentDoc.id), {
+        await updateDoc(studentDocRef, {
           is_banned: false,
           is_chat_banned: false
         });
@@ -1579,107 +1584,6 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 </form>
               </div>
 
-              {/* Student Ban & Action Modal */}
-              <AnimatePresence>
-                {selectedStudentForAction && (
-                  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.95 }}
-                      className="bg-stone-950 border-2 border-amber-500/60 rounded-3xl p-6 sm:p-8 max-w-lg w-full text-right space-y-6 shadow-2xl relative overflow-hidden"
-                    >
-                      <div className="flex items-center justify-between border-b border-gray-800 pb-4">
-                        <button
-                          onClick={() => setSelectedStudentForAction(null)}
-                          className="p-2 text-gray-400 hover:text-stone-100 rounded-xl bg-white/5 transition"
-                        >
-                          <X className="w-5 h-5" />
-                        </button>
-                        <div className="flex items-center gap-3">
-                          <div className="p-3 bg-amber-500/20 rounded-2xl border border-amber-500/40 text-amber-400">
-                            <ShieldAlert className="w-6 h-6" />
-                          </div>
-                          <div>
-                            <h3 className="text-xl font-black text-stone-100">إجراءات الحظر وإدارة الطالب</h3>
-                            <p className="text-xs text-gray-400 font-bold mt-0.5">حدد الإجراء المطلوب للطالب من الشات</p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Student Info Card */}
-                      <div className="bg-stone-900 border border-gray-800 rounded-2xl p-4 space-y-2">
-                        <div className="flex justify-between items-center text-sm font-bold">
-                          <span className="text-amber-400 font-mono">{selectedStudentForAction.code}</span>
-                          <span className="text-gray-400">كود الطالب:</span>
-                        </div>
-                        <div className="flex justify-between items-center text-sm font-bold">
-                          <span className="text-stone-100">{selectedStudentForAction.name}</span>
-                          <span className="text-gray-400">اسم الطالب:</span>
-                        </div>
-                        <div className="flex justify-between items-center text-sm font-bold">
-                          <span className="text-sky-400">{selectedStudentForAction.className}</span>
-                          <span className="text-gray-400">الصف الدراسي:</span>
-                        </div>
-                      </div>
-
-                      {/* Ban Action Buttons */}
-                      <div className="space-y-3">
-                        <p className="text-xs font-black text-gray-300">اختر نوع الحظر المطلوب تنفيذها فوراً:</p>
-
-                        <button
-                          onClick={() => handleSetStudentBanType('chat')}
-                          className="w-full bg-amber-950/80 hover:bg-amber-900/90 border-2 border-amber-600/80 text-amber-200 p-4 rounded-2xl font-black text-right transition flex items-start gap-3 shadow-lg"
-                        >
-                          <Ban className="w-6 h-6 text-amber-400 shrink-0 mt-0.5" />
-                          <div>
-                            <span className="block text-sm font-black text-amber-300">🚫 حظر من الشات فقط</span>
-                            <span className="block text-xs font-bold text-gray-400 mt-1 leading-relaxed">
-                              يُمنع الطالب من كتابة أي رسالة في شات الصف فقط، مع إمكانية استخدام المنصة بشكل كامل ودخول الامتحان وفيديوهات الدروس.
-                            </span>
-                          </div>
-                        </button>
-
-                        <button
-                          onClick={() => handleSetStudentBanType('platform')}
-                          className="w-full bg-rose-950/80 hover:bg-rose-900/90 border-2 border-rose-600/80 text-rose-200 p-4 rounded-2xl font-black text-right transition flex items-start gap-3 shadow-lg"
-                        >
-                          <UserX className="w-6 h-6 text-rose-400 shrink-0 mt-0.5" />
-                          <div>
-                            <span className="block text-sm font-black text-rose-300">⛔ حظر شامل من المنصة بالكامل</span>
-                            <span className="block text-xs font-bold text-gray-400 mt-1 leading-relaxed">
-                              يتم حظر حساب الطالب بالكامل من المنصة وتسجيل خروجه فوراً ومنعه من تسجيل الدخول نهائياً.
-                            </span>
-                          </div>
-                        </button>
-
-                        <button
-                          onClick={() => handleSetStudentBanType('unban')}
-                          className="w-full bg-emerald-950/80 hover:bg-emerald-900/90 border-2 border-emerald-600/80 text-emerald-200 p-4 rounded-2xl font-black text-right transition flex items-start gap-3 shadow-lg"
-                        >
-                          <Check className="w-6 h-6 text-emerald-400 shrink-0 mt-0.5" />
-                          <div>
-                            <span className="block text-sm font-black text-emerald-300">✅ إلغاء كافة الحظورات (تفعيل الحساب)</span>
-                            <span className="block text-xs font-bold text-gray-400 mt-1 leading-relaxed">
-                              إلغاء حظر الشات وحظر المنصة وإعادة تفعيل حماس الطالب.
-                            </span>
-                          </div>
-                        </button>
-
-                        {selectedStudentForAction.messageDocId && (
-                          <button
-                            onClick={() => handleDeleteChatMessageDoc(selectedStudentForAction.messageDocId!)}
-                            className="w-full bg-stone-900 hover:bg-stone-800 border border-gray-700 text-gray-300 p-3 rounded-2xl font-bold text-center text-xs transition flex items-center justify-center gap-2 mt-2"
-                          >
-                            <Trash2 className="w-4 h-4 text-rose-400" />
-                            <span>حذف هذه الرسالة المحددة من الشات</span>
-                          </button>
-                        )}
-                      </div>
-                    </motion.div>
-                  </div>
-                )}
-              </AnimatePresence>
             </div>
           )}
 
@@ -3566,6 +3470,125 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 </div>
               </form>
             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Global Student Ban & Action Modal */}
+      <AnimatePresence>
+        {selectedStudentForAction && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-stone-950 border-2 border-amber-500/60 rounded-3xl p-6 sm:p-8 max-w-lg w-full text-right space-y-6 shadow-2xl relative overflow-hidden"
+            >
+              <div className="flex items-center justify-between border-b border-gray-800 pb-4">
+                <button
+                  onClick={() => setSelectedStudentForAction(null)}
+                  className="p-2 text-gray-400 hover:text-stone-100 rounded-xl bg-white/5 transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-amber-500/20 rounded-2xl border border-amber-500/40 text-amber-400">
+                    <ShieldAlert className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-stone-100">إجراءات الحظر وإدارة الطالب</h3>
+                    <p className="text-xs text-gray-400 font-bold mt-0.5">اختر نوع الحظر والإجراء المطلوب تنفيذه</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Student Info Card */}
+              <div className="bg-stone-900 border border-gray-800 rounded-2xl p-4 space-y-2">
+                <div className="flex justify-between items-center text-sm font-bold">
+                  <span className="text-amber-400 font-mono">{selectedStudentForAction.code}</span>
+                  <span className="text-gray-400">كود الطالب:</span>
+                </div>
+                <div className="flex justify-between items-center text-sm font-bold">
+                  <span className="text-stone-100">{selectedStudentForAction.name}</span>
+                  <span className="text-gray-400">اسم الطالب:</span>
+                </div>
+                {selectedStudentForAction.className && (
+                  <div className="flex justify-between items-center text-sm font-bold">
+                    <span className="text-sky-400">{selectedStudentForAction.className}</span>
+                    <span className="text-gray-400">الصف الدراسي:</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Ban Action Buttons */}
+              <div className="space-y-3">
+                <p className="text-xs font-black text-gray-300">اختر نوع الحظر المطلوب تنفيذه فوراً:</p>
+
+                <button
+                  onClick={() => handleSetStudentBanType('chat')}
+                  className="w-full bg-amber-950/80 hover:bg-amber-900/90 border-2 border-amber-600/80 text-amber-200 p-4 rounded-2xl font-black text-right transition flex items-start gap-3 shadow-lg cursor-pointer"
+                >
+                  <Ban className="w-6 h-6 text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="block text-sm font-black text-amber-300">🚫 حظر من الشات فقط</span>
+                    <span className="block text-xs font-bold text-gray-400 mt-1 leading-relaxed">
+                      يُمنع الطالب من كتابة أي رسالة في شات الصف فقط، مع إمكانية استخدام المنصة بشكل كامل ودخول الامتحان وفيديوهات الدروس.
+                    </span>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => handleSetStudentBanType('platform')}
+                  className="w-full bg-rose-950/80 hover:bg-rose-900/90 border-2 border-rose-600/80 text-rose-200 p-4 rounded-2xl font-black text-right transition flex items-start gap-3 shadow-lg cursor-pointer"
+                >
+                  <UserX className="w-6 h-6 text-rose-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="block text-sm font-black text-rose-300">⛔ حظر شامل من المنصة بالكامل</span>
+                    <span className="block text-xs font-bold text-gray-400 mt-1 leading-relaxed">
+                      يتم حظر حساب الطالب بالكامل من المنصة وتسجيل خروجه فوراً ومنعه من تسجيل الدخول نهائياً.
+                    </span>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => handleSetStudentBanType('unban')}
+                  className="w-full bg-emerald-950/80 hover:bg-emerald-900/90 border-2 border-emerald-600/80 text-emerald-200 p-4 rounded-2xl font-black text-right transition flex items-start gap-3 shadow-lg cursor-pointer"
+                >
+                  <Check className="w-6 h-6 text-emerald-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="block text-sm font-black text-emerald-300">✅ إلغاء كافة الحظورات (تفعيل الحساب)</span>
+                    <span className="block text-xs font-bold text-gray-400 mt-1 leading-relaxed">
+                      إلغاء حظر الشات وحظر المنصة وإعادة تفعيل حماس الطالب.
+                    </span>
+                  </div>
+                </button>
+
+                {selectedStudentForAction.messageDocId && (
+                  <button
+                    onClick={() => handleDeleteChatMessageDoc(selectedStudentForAction.messageDocId!)}
+                    className="w-full bg-stone-900 hover:bg-stone-800 border border-gray-700 text-gray-300 p-3 rounded-2xl font-bold text-center text-xs transition flex items-center justify-center gap-2 mt-2 cursor-pointer"
+                  >
+                    <Trash2 className="w-4 h-4 text-rose-400" />
+                    <span>حذف هذه الرسالة المحددة من الشات</span>
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Global Toast Notification */}
+      <AnimatePresence>
+        {chatToastNotice && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 bg-stone-900 border-2 border-amber-500 text-amber-300 px-6 py-3 rounded-2xl font-black text-sm shadow-2xl flex items-center gap-3"
+          >
+            <ShieldAlert className="w-5 h-5 text-amber-400" />
+            <span>{chatToastNotice}</span>
           </motion.div>
         )}
       </AnimatePresence>

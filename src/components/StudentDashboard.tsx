@@ -1350,25 +1350,40 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
                   <div className="relative">
                     <select
                       required
-                      className="w-full bg-stone-900 border border-stone-700 focus:border-cyan-400 text-stone-100 rounded-xl p-4 font-bold outline-none transition cursor-pointer appearance-none text-right"
+                      disabled={!loginForm.className}
+                      className={`w-full bg-stone-900 border border-stone-700 focus:border-cyan-400 text-stone-100 rounded-xl p-4 font-bold outline-none transition appearance-none text-right ${
+                        !loginForm.className ? 'opacity-50 cursor-not-allowed border-dashed text-stone-500' : 'cursor-pointer'
+                      }`}
                       value={loginForm.groupName}
                       onChange={e => setLoginForm(prev => ({ ...prev, groupName: e.target.value }))}
                     >
-                      <option value="" disabled className="text-stone-500">اختر المجموعة الخاصة بك...</option>
-                      {centerGroups
-                        .filter(g => !loginForm.className || g.class_name === loginForm.className)
-                        .map(g => {
-                          const timeInfo = [g.day_of_week, g.time].filter(Boolean).join(' • ');
-                          return (
-                            <option key={g.id} value={g.group_name} className="text-stone-900 bg-white font-bold">
-                              {g.group_name} {timeInfo ? `(${timeInfo})` : ''}
-                            </option>
-                          );
-                        })}
-                      <option value="مجموعة السبت والثلثاء" className="text-stone-900 bg-white font-bold">مجموعة السبت والثلثاء</option>
-                      <option value="مجموعة الأحد والأربعاء" className="text-stone-900 bg-white font-bold">مجموعة الأحد والأربعاء</option>
-                      <option value="مجموعة الإثنين والخميس" className="text-stone-900 bg-white font-bold">مجموعة الإثنين والخميس</option>
-                      <option value="مجموعة الجمعة" className="text-stone-900 bg-white font-bold">مجموعة الجمعة</option>
+                      {!loginForm.className ? (
+                        <option value="" disabled className="text-stone-500">⚠️ اختر الصف الدراسي أولاً لعرض المجموعات...</option>
+                      ) : (
+                        <option value="" disabled className="text-stone-500">اختر المجموعة الخاصة بك...</option>
+                      )}
+                      
+                      {loginForm.className && (() => {
+                        const matched = centerGroups.filter(g => g.class_name === loginForm.className);
+                        if (matched.length > 0) {
+                          return matched.map(g => {
+                            const timeInfo = [g.day_of_week, g.time].filter(Boolean).join(' • ');
+                            return (
+                              <option key={g.id} value={g.group_name} className="text-stone-900 bg-white font-bold">
+                                {g.group_name} {timeInfo ? `(${timeInfo})` : ''}
+                              </option>
+                            );
+                          });
+                        }
+                        return (
+                          <>
+                            <option value="مجموعة السبت والثلثاء" className="text-stone-900 bg-white font-bold">مجموعة السبت والثلثاء</option>
+                            <option value="مجموعة الأحد والأربعاء" className="text-stone-900 bg-white font-bold">مجموعة الأحد والأربعاء</option>
+                            <option value="مجموعة الإثنين والخميس" className="text-stone-900 bg-white font-bold">مجموعة الإثنين والخميس</option>
+                            <option value="مجموعة الجمعة" className="text-stone-900 bg-white font-bold">مجموعة الجمعة</option>
+                          </>
+                        );
+                      })()}
                     </select>
                     <Users className="absolute left-4 top-4 text-stone-500 w-5 h-5" />
                   </div>
