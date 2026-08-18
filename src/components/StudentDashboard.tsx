@@ -51,6 +51,8 @@ import {
   CheckCircle2,
   XCircle,
   Eye,
+  EyeOff,
+  Key,
   AlertTriangle,
   Download
 } from 'lucide-react';
@@ -174,6 +176,8 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
   const [newlyRegisteredStudent, setNewlyRegisteredStudent] = useState<any>(null);
   const [legacyStudentNeedPassword, setLegacyStudentNeedPassword] = useState<any>(null);
   const [newPassword, setNewPassword] = useState('');
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showRegisterPassword, setShowRegisterPassword] = useState(false);
 
   // Selected Avatar of the student (default is spiderman)
   const [selectedAvatar, setSelectedAvatar] = useState<string>('spiderman');
@@ -702,95 +706,62 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
     setLoginError('');
     setIsSubmittingLogin(true);
 
-    const { code, password } = loginForm;
-    if (!code || !password) {
-      setLoginError('يرجى إدخال الكود الفريد وكلمة المرور الخاصة بك لتسجيل الدخول!');
+    const enteredPass = loginForm.password ? loginForm.password.trim() : '';
+    if (!enteredPass) {
+      setLoginError('يرجى إدخال كلمة المرور الخاصة بك لتسجيل الدخول!');
       setIsSubmittingLogin(false);
       return;
     }
 
     try {
-      const rawCode = code.trim();
-      const formattedCode = rawCode.toUpperCase();
-      const cleanNumericCode = rawCode.replace(/\D/g, '');
-
-      // Search student by exact formatted code or clean numeric code
-      let studentSnap = await getDocs(query(collection(db, 'students'), where('code', '==', formattedCode)));
+      // 1. Exact match query on password
+      const studentSnap = await getDocs(query(collection(db, 'students'), where('password', '==', enteredPass)));
       
-      if (studentSnap.empty && cleanNumericCode) {
-        studentSnap = await getDocs(query(collection(db, 'students'), where('code', '==', cleanNumericCode)));
-      }
-
-      // If still empty, scan all student documents for numeric digit match
-      if (studentSnap.empty && cleanNumericCode) {
+      let matchedDoc: any = null;
+      if (!studentSnap.empty) {
+        matchedDoc = studentSnap.docs[0];
+      } else {
+        // Fallback search across all students in case of trimmed match
         const allStudentsSnap = await getDocs(collection(db, 'students'));
-        const matchedDoc = allStudentsSnap.docs.find(d => {
+        matchedDoc = allStudentsSnap.docs.find(d => {
           const docData = d.data();
-          const docCodeClean = docData.code ? String(docData.code).replace(/\D/g, '') : '';
-          return docCodeClean === cleanNumericCode && cleanNumericCode.length > 0;
+          const docPass = docData.password ? String(docData.password).trim() : '';
+          return docPass === enteredPass;
         });
-
-        if (matchedDoc) {
-          studentSnap = { empty: false, docs: [matchedDoc] } as any;
-        }
       }
 
-      if (studentSnap.empty) {
-        setLoginError('عذراً يا بطل! كود الطالب المدخل غير مسجل بالأكاديمية. يرجى مراجعته أو تسجيل حساب جديد.');
+      if (!matchedDoc) {
+        setLoginError('عذراً يا بطل! كلمة المرور المدخلة غير مسجلة بالأكاديمية أو غير صحيحة. يرجى التأكد من كتابة كلمة المرور بدقة أو تسجيل حساب جديد.');
         setIsSubmittingLogin(false);
         return;
       }
 
-      const studentDoc = studentSnap.docs[0];
-      const data = studentDoc.data();
+      const data = matchedDoc.data();
       const dbCode = data.code ? String(data.code) : '';
-      const finalCleanCode = cleanNumericCode || dbCode.replace(/\D/g, '') || dbCode;
-
-      // Auto-migrate legacy student code in Firestore to numbers-only
-      if (/\D/.test(dbCode) && finalCleanCode) {
-        try {
-          await updateDoc(doc(db, 'students', studentDoc.id), { code: finalCleanCode });
-        } catch (e) {
-          console.warn('Auto-migrating student code error:', e);
-        }
-      }
+      const finalCleanCode = dbCode.replace(/\D/g, '') || dbCode || '101';
 
       if (data.is_banned) {
-        setLoginError('🚨 عذراً، تم حظر هذا الحساب من المنصة نهائياً بسبب استخدام كلمات بذيئة وغير لائقة! يرجى مراجعة الأستاذ الخيميائي.');
+        setLoginError('🚨 عذراً، تم حظر هذا الحساب من المنصة نهائياً بسبب مخالفة الشروط! يرجى مراجعة الأستاذ الخيميائي.');
         setIsSubmittingLogin(false);
         return;
       }
 
-      // Check if student has password in database
-      if (data.password) {
-        if (data.password === password) {
-          // Success
-          const savedData = { 
-            id: studentDoc.id, 
-            name: data.name,
-            code: finalCleanCode,
-            phone: data.phone,
-            className: data.class_name, 
-            groupName: data.group_name,
-            totalScore: data.total_score || 0,
-            badges: data.badges || ['Iron Recruit'],
-            avatar: data.avatar || 'spiderman'
-          };
-          localStorage.setItem('jamal_student', JSON.stringify(savedData));
-          setStudent(savedData);
-          setSelectedAvatar(savedData.avatar);
-          await fetchStudentData(savedData.code, savedData.className);
-        } else {
-          setLoginError('كلمة المرور غير صحيحة! يرجى إعادة المحاولة أو مراجعة الأستاذ الخيميائي لإعادة تعيينها.');
-        }
-      } else {
-        // Legacy student with no password. Trigger password setup upgrade.
-        setLegacyStudentNeedPassword({
-          id: studentDoc.id,
-          ...data,
-          code: finalCleanCode
-        });
-      }
+      // Success Login
+      const savedData = { 
+        id: matchedDoc.id, 
+        name: data.name,
+        code: finalCleanCode,
+        phone: data.phone,
+        className: data.class_name || data.className, 
+        groupName: data.group_name || data.groupName,
+        totalScore: data.total_score || 0,
+        badges: data.badges || ['Iron Recruit'],
+        avatar: data.avatar || 'spiderman'
+      };
+      localStorage.setItem('jamal_student', JSON.stringify(savedData));
+      setStudent(savedData);
+      setSelectedAvatar(savedData.avatar);
+      await fetchStudentData(savedData.code, savedData.className);
 
     } catch (err: any) {
       setLoginError('خطأ أثناء الاتصال بالأكاديمية: ' + err.message);
@@ -811,7 +782,33 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
       return;
     }
 
+    const trimmedPass = password.trim();
+    if (trimmedPass.length < 3) {
+      setLoginError('كلمة المرور يجب ألا تقل عن 3 أحرف أو أرقام!');
+      setIsSubmittingLogin(false);
+      return;
+    }
+
     try {
+      // 1. Password uniqueness validation across all registered students
+      const passSnap = await getDocs(query(collection(db, 'students'), where('password', '==', trimmedPass)));
+      let isDuplicate = !passSnap.empty;
+
+      if (!isDuplicate) {
+        const allStudentsSnap = await getDocs(collection(db, 'students'));
+        const found = allStudentsSnap.docs.some(d => {
+          const p = d.data().password ? String(d.data().password).trim() : '';
+          return p === trimmedPass;
+        });
+        if (found) isDuplicate = true;
+      }
+
+      if (isDuplicate) {
+        setLoginError('⚠️ كلمة المرور هذه محجوزة ومستخدمة بالفعل لطالب آخر! لا يجوز تكرار كلمات المرور لأن تسجيل الدخول يتم بكلمة المرور فقط. يرجى اختيار كلمة مرور فريدة ومميزة خاصة بك.');
+        setIsSubmittingLogin(false);
+        return;
+      }
+
       // Create a unique student code
       const generatedCode = await generateUniqueCode();
 
@@ -819,7 +816,7 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
         name: name.trim(),
         code: generatedCode,
         phone: phone.trim(),
-        password: password.trim(),
+        password: trimmedPass,
         class_name: className,
         group_name: groupName,
         total_score: 0,
@@ -853,11 +850,25 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
 
   const handleUpgradeLegacyStudentPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPassword.trim()) return;
+    const cleanPass = newPassword.trim();
+    if (!cleanPass) return;
+
+    if (cleanPass.length < 3) {
+      alert('كلمة المرور يجب ألا تقل عن 3 أحرف أو أرقام!');
+      return;
+    }
 
     try {
+      // Check password uniqueness
+      const passSnap = await getDocs(query(collection(db, 'students'), where('password', '==', cleanPass)));
+      const duplicateDoc = passSnap.docs.find(d => d.id !== legacyStudentNeedPassword.id);
+      if (duplicateDoc) {
+        alert('⚠️ كلمة المرور هذه محجوزة ومستخدمة بالفعل لطالب آخر! يرجى اختيار كلمة مرور فريدة.');
+        return;
+      }
+
       await updateDoc(doc(db, 'students', legacyStudentNeedPassword.id), {
-        password: newPassword.trim()
+        password: cleanPass
       });
 
       const savedData = { 
@@ -1208,51 +1219,53 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
           )}
 
           {authMode === 'login' ? (
-            /* LOGIN FORM */
-            <form onSubmit={handleLogin} className="space-y-5">
-              <div>
-                <label className="block text-xs font-black text-cyan-400 uppercase tracking-wider mb-2">
-                  Student Code (كود الطالب)
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    required
-                    placeholder="مثال: 58392"
-                    className="w-full bg-stone-900 border border-stone-700 focus:border-cyan-400 text-stone-100 uppercase rounded-xl p-4 font-mono font-bold outline-none transition text-right"
-                    value={loginForm.code}
-                    onChange={e => setLoginForm(prev => ({ ...prev, code: e.target.value }))}
-                  />
-                  <Shield className="absolute left-4 top-4 text-stone-500 w-5 h-5" />
+            /* LOGIN FORM - PASSWORD ONLY */
+            <form onSubmit={handleLogin} className="space-y-5 text-right">
+              <div className="bg-cyan-950/30 border border-cyan-500/20 rounded-2xl p-4 mb-2">
+                <div className="flex items-center gap-2.5 text-cyan-400 font-black text-sm mb-1">
+                  <Key className="w-5 h-5 shrink-0" />
+                  <span>تسجيل الدخول السريع بكلمة المرور</span>
                 </div>
+                <p className="text-xs text-stone-400 font-bold leading-relaxed">
+                  أدخل كلمة المرور الخاصة بحسابك المسجل للدخول فوراً إلى المنصة وبدء التعلم.
+                </p>
               </div>
 
               <div>
                 <label className="block text-xs font-black text-cyan-400 uppercase tracking-wider mb-2">
-                  Password (كلمة المرور)
+                  كلمة المرور الخاصة بك (Password)
                 </label>
                 <div className="relative">
                   <input
-                    type="password"
+                    type={showLoginPassword ? "text" : "password"}
                     required
-                    placeholder="أدخل كلمة مرور بوابتك"
-                    className="w-full bg-stone-900 border border-stone-700 focus:border-cyan-400 text-stone-100 rounded-xl p-4 font-bold outline-none transition text-right"
+                    autoFocus
+                    placeholder="أدخل كلمة المرور الخاصة بحسابك..."
+                    className="w-full bg-stone-900 border-2 border-stone-700 focus:border-cyan-400 text-stone-100 rounded-xl p-4 pl-12 pr-12 font-bold outline-none transition text-right tracking-wide shadow-inner text-base"
                     value={loginForm.password}
                     onChange={e => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
                   />
-                  <span className="absolute left-4 top-4 text-stone-500 font-bold">🔑</span>
+                  <Key className="absolute right-4 top-4 text-stone-500 w-5 h-5" />
+                  <button
+                    type="button"
+                    onClick={() => setShowLoginPassword(!showLoginPassword)}
+                    className="absolute left-4 top-4 text-stone-400 hover:text-stone-200 transition cursor-pointer"
+                    title={showLoginPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
+                  >
+                    {showLoginPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
                 </div>
               </div>
 
               <button
                 type="submit"
                 disabled={isSubmittingLogin}
-                className="w-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black py-4 rounded-xl shadow-lg transform hover:translate-y-[-2px] transition active:translate-y-0 text-xl tracking-wide uppercase flex justify-center items-center gap-2"
+                className="w-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black py-4 rounded-xl shadow-lg transform hover:translate-y-[-2px] transition active:translate-y-0 text-xl tracking-wide uppercase flex justify-center items-center gap-2 cursor-pointer"
               >
                 {isSubmittingLogin ? (
                   <>
                     <span className="w-5 h-5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"></span>
-                    جاري التحقق...
+                    جاري التحقق والدخول...
                   </>
                 ) : (
                   <>
@@ -1263,7 +1276,7 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
             </form>
           ) : (
             /* REGISTER FORM */
-            <form onSubmit={handleRegister} className="space-y-5">
+            <form onSubmit={handleRegister} className="space-y-5 text-right">
               <div>
                 <label className="block text-xs font-black text-cyan-400 uppercase tracking-wider mb-2">
                   Student Full Name (الاسم ثلاثي بالكامل)
@@ -1299,20 +1312,35 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
               </div>
 
               <div>
-                <label className="block text-xs font-black text-cyan-400 uppercase tracking-wider mb-2">
-                  Password (كلمة المرور الخاصة بك)
-                </label>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] text-amber-400 font-bold">🔐 تُستخدم حصرياً لتسجيل الدخول</span>
+                  <label className="block text-xs font-black text-cyan-400 uppercase tracking-wider">
+                    كلمة المرور الخاصة بك (Password)
+                  </label>
+                </div>
                 <div className="relative">
                   <input
-                    type="password"
+                    type={showRegisterPassword ? "text" : "password"}
                     required
-                    placeholder="اختر كلمة مرور قوية لتأمين حسابك"
-                    className="w-full bg-stone-900 border border-stone-700 focus:border-cyan-400 text-stone-100 rounded-xl p-4 font-bold outline-none transition text-right"
+                    minLength={3}
+                    placeholder="اختر كلمة مرور فريدة خاصة بك لتسجيل الدخول بها..."
+                    className="w-full bg-stone-900 border border-stone-700 focus:border-cyan-400 text-stone-100 rounded-xl p-4 pl-12 pr-12 font-bold outline-none transition text-right"
                     value={loginForm.password}
                     onChange={e => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
                   />
-                  <span className="absolute left-4 top-4 text-stone-500 font-bold">🔑</span>
+                  <Key className="absolute right-4 top-4 text-stone-500 w-5 h-5" />
+                  <button
+                    type="button"
+                    onClick={() => setShowRegisterPassword(!showRegisterPassword)}
+                    className="absolute left-4 top-4 text-stone-400 hover:text-stone-200 transition cursor-pointer"
+                    title={showRegisterPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
+                  >
+                    {showRegisterPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
                 </div>
+                <p className="text-[11px] text-stone-400 font-bold mt-1 leading-relaxed">
+                  ⚠️ تنبيه: كلمة المرور هي المفتاح الوحيد لتسجيل دخولك إلى حسابك. لا يجوز تكرارها مع أي طالب آخر.
+                </p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1393,12 +1421,12 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
               <button
                 type="submit"
                 disabled={isSubmittingLogin}
-                className="w-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black py-4 rounded-xl shadow-lg transform hover:translate-y-[-2px] transition active:translate-y-0 text-xl tracking-wide flex justify-center items-center gap-2"
+                className="w-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black py-4 rounded-xl shadow-lg transform hover:translate-y-[-2px] transition active:translate-y-0 text-xl tracking-wide flex justify-center items-center gap-2 cursor-pointer"
               >
                 {isSubmittingLogin ? (
                   <>
                     <span className="w-5 h-5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"></span>
-                    جاري الإنشاء...
+                    جاري التحقق والإنشاء...
                   </>
                 ) : (
                   <>
@@ -1499,8 +1527,8 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
                   </div>
                 </div>
 
-                <div className="bg-rose-950/40 border border-rose-900/60 p-4 rounded-xl mb-6 text-rose-300 text-xs font-bold leading-relaxed text-right">
-                  ⚠️ **تنبيه هام جداً:** التقط لقطة شاشة (Screenshot) أو احفظ الكود وكلمة المرور في مكان آمن. لن تتمكن من الدخول للمحاضرات أو الاختبارات بدونهما!
+                <div className="bg-amber-950/40 border border-amber-900/60 p-4 rounded-xl mb-6 text-amber-300 text-xs font-bold leading-relaxed text-right">
+                  ⚠️ **تنبيه هام جداً:** احفظ كلمة المرور الخاصة بك في مكان آمن أو التقط لقطة شاشة (Screenshot). كلمة المرور هي وسيلتك الحصرية لتسجيل الدخول إلى حسابك في أي وقت!
                 </div>
 
                 <div className="flex gap-4">

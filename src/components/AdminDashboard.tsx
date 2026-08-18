@@ -415,9 +415,24 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   const handleSaveStudentEdit = async (studentId: string) => {
     try {
+      const trimmedPass = (editStudentData.password || '').trim();
+      if (!trimmedPass) {
+        alert("يرجى إدخال كلمة مرور للطالب.");
+        return;
+      }
+
+      // Check if another student has the same password
+      const passQuery = query(collection(db, 'students'), where('password', '==', trimmedPass));
+      const passSnap = await getDocs(passQuery);
+      const duplicateDoc = passSnap.docs.find(d => d.id !== studentId);
+      if (duplicateDoc) {
+        alert(`⚠️ كلمة المرور "${trimmedPass}" مستخدمة بالفعل لطالب آخر (${duplicateDoc.data().name})! لا يُسمح بتكرار كلمات المرور لأن تسجيل الدخول يتم بكلمة المرور فقط.`);
+        return;
+      }
+
       await updateDoc(doc(db, 'students', studentId), {
         name: editStudentData.name,
-        password: editStudentData.password,
+        password: trimmedPass,
         phone: editStudentData.phone,
         class_name: editStudentData.class_name,
         className: editStudentData.class_name,
