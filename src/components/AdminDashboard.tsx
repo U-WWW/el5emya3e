@@ -648,44 +648,61 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       if (id) {
         studentDocRef = doc(db, 'students', id);
       } else if (code) {
-        const q = query(collection(db, 'students'), where('code', '==', code));
-        const snap = await getDocs(q);
+        const cleanCode = String(code).replace(/\D/g, '') || code;
+        let q = query(collection(db, 'students'), where('code', '==', cleanCode));
+        let snap = await getDocs(q);
+        if (snap.empty && cleanCode !== code) {
+          q = query(collection(db, 'students'), where('code', '==', code));
+          snap = await getDocs(q);
+        }
         if (!snap.empty) {
           studentDocRef = doc(db, 'students', snap.docs[0].id);
         }
       }
 
       if (!studentDocRef) {
+        alert("لم يتم العثور على سجل الطالب في قاعدة البيانات.");
         setChatToastNotice("لم يتم العثور على سجل الطالب في قاعدة البيانات.");
         setTimeout(() => setChatToastNotice(null), 4000);
         return;
       }
 
+      const is_banned = type === 'platform';
+      const is_chat_banned = type === 'chat' || type === 'platform';
+
+      await updateDoc(studentDocRef, {
+        is_banned: is_banned,
+        is_chat_banned: is_chat_banned
+      });
+
+      // Update local students list immediately for instant UI reactivity
+      setStudents(prev => prev.map(s => {
+        if (s.id === id || s.code === code) {
+          return {
+            ...s,
+            is_banned: is_banned,
+            is_chat_banned: is_chat_banned
+          };
+        }
+        return s;
+      }));
+
+      let noticeText = '';
       if (type === 'chat') {
-        await updateDoc(studentDocRef, {
-          is_chat_banned: true,
-          is_banned: false
-        });
-        setChatToastNotice(`تم حظر الطالب (${name}) من إرسال الرسائل في الشات فقط!`);
+        noticeText = `تم حظر الطالب (${name || code}) من إرسال الرسائل في الشات فقط بنجاح!`;
       } else if (type === 'platform') {
-        await updateDoc(studentDocRef, {
-          is_banned: true,
-          is_chat_banned: true
-        });
-        setChatToastNotice(`تم حظر الطالب (${name}) بالكامل من المنصة!`);
+        noticeText = `تم حظر الطالب (${name || code}) بالكامل من المنصة بنجاح!`;
       } else if (type === 'unban') {
-        await updateDoc(studentDocRef, {
-          is_banned: false,
-          is_chat_banned: false
-        });
-        setChatToastNotice(`تم إلغاء كافة الحظورات عن الطالب (${name})!`);
+        noticeText = `تم إلغاء كافة الحظورات وتفعيل حساب الطالب (${name || code}) بنجاح!`;
       }
 
+      setChatToastNotice(noticeText);
       setTimeout(() => setChatToastNotice(null), 4000);
       setSelectedStudentForAction(null);
       await fetchAdminData();
     } catch (err) {
       console.error("Error setting student ban:", err);
+      alert("حدث خطأ أثناء تنفيذ الإجراء. يرجى المحاولة مرة أخرى.");
       setChatToastNotice("حدث خطأ أثناء تنفيذ الإجراء.");
       setTimeout(() => setChatToastNotice(null), 4000);
     }

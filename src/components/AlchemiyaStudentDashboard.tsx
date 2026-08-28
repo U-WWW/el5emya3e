@@ -18,7 +18,6 @@ import {
   ArrowRight,
   ShieldCheck,
   BarChart3,
-  Flame,
   Star,
   Layers,
   Search,
@@ -330,7 +329,7 @@ export default function AlchemiyaStudentDashboard({ currentStudent, onClose }: C
       ) : (
         <>
           {/* Main Hero Metrics Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {/* 1. Relative Performance Level */}
             <motion.div
               whileHover={{ scale: 1.02 }}
@@ -364,25 +363,7 @@ export default function AlchemiyaStudentDashboard({ currentStudent, onClose }: C
               </div>
             </motion.div>
 
-            {/* 2. Total Points Earned vs Group Max */}
-            <motion.div
-              whileHover={{ scale: 1.02 }}
-              className="bg-gradient-to-br from-cyan-950/80 to-slate-900 border-2 border-cyan-500/40 p-6 rounded-3xl relative overflow-hidden shadow-xl"
-            >
-              <div className="flex justify-between items-start mb-3">
-                <div className="p-3 bg-cyan-500/20 rounded-2xl text-cyan-400">
-                  <Flame className="w-6 h-6" />
-                </div>
-                <div className="text-left font-mono">
-                  <span className="text-2xl font-black text-cyan-300">{computedStats.totalEarned}</span>
-                  <span className="text-xs text-slate-400 font-normal"> / {computedStats.groupMaxScore}</span>
-                </div>
-              </div>
-              <h4 className="text-xs font-bold text-slate-300">مجموع النقاط المحققة</h4>
-              <p className="text-xs text-slate-400 mt-1">مقارنة مع أعلى درجة بـ {groupName}</p>
-            </motion.div>
-
-            {/* 3. Group Rank */}
+            {/* 2. Group Rank */}
             <motion.div
               whileHover={{ scale: 1.02 }}
               className="bg-gradient-to-br from-amber-950/80 to-slate-900 border-2 border-amber-500/40 p-6 rounded-3xl relative overflow-hidden shadow-xl"
@@ -399,7 +380,7 @@ export default function AlchemiyaStudentDashboard({ currentStudent, onClose }: C
               <p className="text-xs text-slate-400 mt-1">من إجمالي {computedStats.totalStudentsInGroup} طالب بالمجموعة</p>
             </motion.div>
 
-            {/* 4. Attendance Rate */}
+            {/* 3. Attendance Rate */}
             <motion.div
               whileHover={{ scale: 1.02 }}
               className="bg-gradient-to-br from-indigo-950/80 to-slate-900 border-2 border-indigo-500/40 p-6 rounded-3xl relative overflow-hidden shadow-xl"

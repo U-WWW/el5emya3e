@@ -190,6 +190,31 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
   const [videos, setVideos] = useState<any[]>([]);
   const [studentResults, setStudentResults] = useState<any[]>([]);
   const [centerGroups, setCenterGroups] = useState<any[]>([]);
+  const [studentStats, setStudentStats] = useState<{
+    examEarned: number;
+    examMax: number;
+    examPct: number;
+    centerEarned: number;
+    centerMax: number;
+    centerPct: number;
+    totalEarnedScore: number;
+    totalPossibleScore: number;
+    overallPercentage: number;
+    onlineExamsCount: number;
+    centerRecordsCount: number;
+  }>({
+    examEarned: 0,
+    examMax: 0,
+    examPct: 0,
+    centerEarned: 0,
+    centerMax: 0,
+    centerPct: 0,
+    totalEarnedScore: 0,
+    totalPossibleScore: 0,
+    overallPercentage: 0,
+    onlineExamsCount: 0,
+    centerRecordsCount: 0
+  });
   
   // Active Exam state
   const [activeQuiz, setActiveQuiz] = useState<any>(null);
@@ -667,13 +692,85 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
 
       setStudentResults(rList);
 
-      // Calculate total points
-      const totalPoints = rList.reduce((acc, curr: any) => acc + (curr.score || 0), 0);
+      // Fetch center records for this student
+      let cList: any[] = [];
+      try {
+        const cSnapAll = await getDocs(collection(db, 'center_records'));
+        cList = cSnapAll.docs
+          .map(doc => ({ id: doc.id, ...doc.data() }))
+          .filter((cr: any) => {
+            if (cr.student_code === cleanCode || cr.student_code === code) return true;
+            if (cleanCode && String(cr.student_code).replace(/\D/g, '') === cleanCode) return true;
+            if (student?.id && cr.student_id === student.id) return true;
+            if (student?.name && cr.student_name === student.name) return true;
+            return false;
+          });
+      } catch (err) {
+        console.warn("Could not fetch center_records:", err);
+      }
+
+      // 1. Calculate Online Exam metrics
+      let examEarned = 0;
+      let examMax = 0;
+      rList.forEach((r: any) => {
+        const sc = Number(r.score) || 0;
+        const tot = Number(r.total_questions) || Number(r.total) || 10;
+        examEarned += sc;
+        examMax += tot;
+      });
+
+      // 2. Calculate Center Records metrics (Homework + Recitation + Exams + Comprehensive)
+      let centerEarned = 0;
+      let centerMax = 0;
+      cList.forEach((cr: any) => {
+        if (cr.attendance === 'حضر') {
+          const hw = Number(cr.homework_degree) || 0;
+          const hwMax = Number(cr.max_homework_degree) || 10;
+          const rec = Number(cr.recitation_degree) || 0;
+          const recMax = Number(cr.max_recitation_degree) || 10;
+          const ex = Number(cr.exam_degree) || 0;
+          const exMax = Number(cr.max_exam_degree) || 20;
+          const comp = Number(cr.comprehensive_exam_degree) || 0;
+          const compMax = Number(cr.max_comprehensive_exam_degree) || (comp > 0 ? 50 : 0);
+
+          centerEarned += (hw + rec + ex + comp);
+          centerMax += (hwMax + recMax + exMax + compMax);
+        }
+      });
+
+      // 3. Combined Total & Overall Cumulative Percentage
+      const totalEarnedScore = examEarned + centerEarned;
+      const totalPossibleScore = examMax + centerMax;
+      const overallPercentage = totalPossibleScore > 0 
+        ? Math.min(100, Math.round((totalEarnedScore / totalPossibleScore) * 100))
+        : (totalEarnedScore > 0 ? 100 : 0);
+
+      const statsObj = {
+        examEarned,
+        examMax,
+        examPct: examMax > 0 ? Math.round((examEarned / examMax) * 100) : 0,
+        centerEarned,
+        centerMax,
+        centerPct: centerMax > 0 ? Math.round((centerEarned / centerMax) * 100) : 0,
+        totalEarnedScore,
+        totalPossibleScore,
+        overallPercentage,
+        onlineExamsCount: rList.length,
+        centerRecordsCount: cList.length
+      };
+
+      setStudentStats(statsObj);
       
-      // Update local storage and student state with real cumulative score
+      // Update local storage and student state with real cumulative score and percentage
       setStudent((prev: any) => {
         if (!prev) return null;
-        const updated = { ...prev, code: cleanCode, totalScore: totalPoints };
+        const updated = { 
+          ...prev, 
+          code: cleanCode, 
+          totalScore: totalEarnedScore,
+          overallPercentage: overallPercentage,
+          stats: statsObj 
+        };
         localStorage.setItem('jamal_student', JSON.stringify(updated));
         return updated;
       });
@@ -1139,16 +1236,16 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
-  // Badges logic
-  const getBadgeAndDescription = (score: number) => {
-    if (score >= 121) return { badge: 'إمبراطور الكيمياء 👑', color: 'text-amber-400 border-amber-400', desc: 'سيد مختبر العلوم والدرجة الكاملة بلا منازع!' };
-    if (score >= 76) return { badge: 'العالم الخيميائي 🧬', color: 'text-rose-400 border-rose-400', desc: 'صاحب النظريات والتفاعلات الكيميائية الفائقة.' };
-    if (score >= 41) return { badge: 'كيميائي المحاليل ⚗️', color: 'text-sky-400 border-cyan-400', desc: 'محلل التفاعلات والعناصر المركبة بذكاء.' };
-    if (score >= 16) return { badge: 'باحث المختبر 🧪', color: 'text-amber-500 border-sky-400', desc: 'مكتشف المركبات والمعادلات الكيميائية بمهارة.' };
-    return { badge: 'مستكشف الذرات ⚛️', color: 'text-amber-500 border-amber-500', desc: 'مستكشف جديد يبدأ أولى خطواته في عالم العلوم الكيميائي.' };
+  // Badges & Academic Honors logic based on combined percentage & score
+  const getBadgeAndDescription = (pct: number, score: number) => {
+    if (pct >= 90 || score >= 120) return { badge: 'إمبراطور الكيمياء (مرتبة الشرف الأولى) 👑', color: 'text-amber-400 border-amber-400', desc: 'سيد مختبر العلوم والدرجة الكاملة بلا منازع! أداء أسطوري فائق التميز.' };
+    if (pct >= 80 || score >= 75) return { badge: 'العالم الخيميائي (جيد جداً مرتفع) 🧬', color: 'text-rose-400 border-rose-400', desc: 'صاحب النظريات والتفاعلات الكيميائية الفائقة ومستوى علمي باهر.' };
+    if (pct >= 65 || score >= 40) return { badge: 'كيميائي المحاليل (جيد) ⚗️', color: 'text-sky-400 border-cyan-400', desc: 'محلل التفاعلات والعناصر المركبة بذكاء ويسير بثبات نحو القمة.' };
+    if (pct >= 50 || score >= 15) return { badge: 'باحث المختبر 🧪', color: 'text-amber-500 border-sky-400', desc: 'مكتشف المركبات والمعادلات الكيميائية ويحتاج لمزيد من الاجتهاد.' };
+    return { badge: 'مستكشف الذرات ⚛️', color: 'text-stone-400 border-stone-500', desc: 'مستكشف واعد يبدأ أولى خطواته في عالم العلوم والكيمياء.' };
   };
 
-  const currentLevelInfo = getBadgeAndDescription(student?.totalScore || 0);
+  const currentLevelInfo = getBadgeAndDescription(studentStats.overallPercentage, studentStats.totalEarnedScore);
 
   if (loading && !student) {
     return (
@@ -2019,23 +2116,78 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
               </div>
             </div>
 
-            {/* Badges Display */}
-            <div className="bg-stone-900/80 backdrop-blur-md border border-stone-800 rounded-3xl p-6 shadow-xl">
-              <div className="flex justify-between items-center border-b border-stone-800 pb-4 mb-5">
-                <h4 className="font-black text-stone-300 text-sm tracking-widest uppercase">
-                  الرتبة العسكرية / العلمية
+            {/* Dynamic Comprehensive Academic Performance & Percentage HUD */}
+            <div className="bg-stone-900/90 backdrop-blur-md border border-cyan-500/30 rounded-3xl p-6 shadow-2xl relative overflow-hidden space-y-5">
+              <div className="flex justify-between items-center border-b border-stone-800 pb-3">
+                <h4 className="font-black text-cyan-400 text-sm tracking-wider uppercase flex items-center gap-2">
+                  <Award className="w-5 h-5 text-amber-400" />
+                  <span>التقييم والنسبة المئوية الشاملة 📊</span>
                 </h4>
-                <Award className="w-5 h-5 text-amber-500" />
+                <span className="text-[11px] font-black bg-cyan-950/80 border border-cyan-800 text-cyan-300 px-2.5 py-0.5 rounded-full">
+                  تراكمي
+                </span>
               </div>
-              <div className="flex items-center gap-5 bg-stone-950/50 border border-stone-800 p-4 rounded-2xl">
-                <div className="p-4 bg-amber-950/30 border border-amber-900/50 rounded-2xl text-amber-400 font-sans font-black text-3xl shadow-inner">
+
+              {/* Main Circular / Hero Metric for Overall Percentage */}
+              <div className="bg-stone-950/70 border border-stone-800 p-4 rounded-2xl text-center relative">
+                <span className="text-xs font-bold text-stone-400 block mb-1">
+                  النسبة المئوية العامة المجمعة (الامتحانات + السنتر)
+                </span>
+                <div className="flex items-baseline justify-center gap-1.5 my-2">
+                  <span className="text-5xl font-black text-amber-400 tracking-tight font-mono">
+                    {studentStats.overallPercentage}%
+                  </span>
+                </div>
+                
+                {/* Progress bar */}
+                <div className="w-full bg-stone-900 h-3 rounded-full overflow-hidden p-[2px] border border-stone-800 mt-2">
+                  <div 
+                    className="bg-gradient-to-r from-cyan-500 via-amber-400 to-emerald-400 h-full rounded-full transition-all duration-1000 shadow-md"
+                    style={{ width: `${Math.min(studentStats.overallPercentage, 100)}%` }}
+                  />
+                </div>
+
+                <div className="flex justify-between items-center text-xs font-bold text-stone-300 mt-3 pt-2 border-t border-stone-800/80">
+                  <span className="text-stone-400">إجمالي الدرجات المحصلة:</span>
+                  <span className="font-mono text-cyan-300 text-sm font-black">
+                    {studentStats.totalEarnedScore} / {studentStats.totalPossibleScore} درجة
+                  </span>
+                </div>
+              </div>
+
+              {/* Detailed Breakdown cards */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-stone-950/50 border border-stone-800/80 p-3 rounded-2xl text-right">
+                  <span className="text-[11px] font-bold text-stone-400 block mb-1">📝 امتحانات المنصة</span>
+                  <span className="text-sm font-black font-mono text-sky-300 block">
+                    {studentStats.examEarned} / {studentStats.examMax}
+                  </span>
+                  <span className="text-[10px] font-bold text-stone-400 block mt-0.5">
+                    النسبة: {studentStats.examPct}%
+                  </span>
+                </div>
+
+                <div className="bg-stone-950/50 border border-stone-800/80 p-3 rounded-2xl text-right">
+                  <span className="text-[11px] font-bold text-stone-400 block mb-1">🏢 درجات السنتر</span>
+                  <span className="text-sm font-black font-mono text-emerald-300 block">
+                    {studentStats.centerEarned} / {studentStats.centerMax}
+                  </span>
+                  <span className="text-[10px] font-bold text-stone-400 block mt-0.5">
+                    النسبة: {studentStats.centerPct}%
+                  </span>
+                </div>
+              </div>
+
+              {/* Academic Rank & Badge Display */}
+              <div className="bg-stone-950/50 border border-stone-800 p-3.5 rounded-2xl flex items-center gap-3.5">
+                <div className="p-3 bg-amber-950/40 border border-amber-800/60 rounded-xl text-amber-400 font-black text-2xl shrink-0">
                   🎖️
                 </div>
-                <div>
-                  <span className={`text-lg font-black ${currentLevelInfo.color} block mb-1`}>
+                <div className="text-right flex-1 min-w-0">
+                  <span className={`text-sm font-black ${currentLevelInfo.color} block truncate`}>
                     {currentLevelInfo.badge}
                   </span>
-                  <span className="text-xs font-bold text-stone-400 block leading-relaxed">
+                  <span className="text-[11px] font-bold text-stone-400 block mt-0.5 leading-snug">
                     {currentLevelInfo.desc}
                   </span>
                 </div>
@@ -2480,64 +2632,85 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
                     </div>
                   </div>
 
-                  {/* CHEMISTRY STATS GRID */}
+                  {/* REAL ACADEMIC CUMULATIVE STATS GRID */}
                   <div className="bg-stone-900 border border-stone-800 shadow-xl p-6 rounded-2xl">
                     <div className="border-b-2 border-gray-800 pb-3 mb-6 text-right">
                       <span className="text-xs font-black bg-cyan-950 text-cyan-400 border border-cyan-800 px-3 py-1.5 rounded uppercase font-mono inline-block">
-                        LEVEL 1 CHEMIST
+                        السجل الأكاديمي الشامل
                       </span>
                       <h4 className="font-sans font-black text-stone-100 text-xl tracking-wider mt-2">
-                        مؤشرات تفوقك الكيميائي الستة 📊
+                        سجل الدرجات والنسبة المئوية التراكمية 📊
                       </h4>
-                      <p className="text-xs font-bold text-gray-500">
-                        مستوى تفوقك الأكاديمي يتم حسابه بدقة بناءً على تفاعلك وأدائك في اختبارات وتجارب العلوم والكيمياء
+                      <p className="text-xs font-bold text-gray-400">
+                        النسبة المئوية العامة محسوبة بدقة بجمع كافة درجات امتحانات المنصة ودرجات تقييمات السنتر (واجبات، تسميع، وامتحانات) مقسومة على الدرجات النهائية الكلية.
                       </p>
                     </div>
 
-                    {/* Six Powers Grid */}
+                    {/* Overall Summary Big Cards */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                      <div className="bg-stone-950/60 border border-amber-500/40 p-4 rounded-2xl text-center">
+                        <span className="text-xs font-bold text-gray-400 block mb-1">النسبة المئوية الشاملة</span>
+                        <span className="text-3xl font-black font-mono text-amber-400 block my-1">
+                          {studentStats.overallPercentage}%
+                        </span>
+                        <span className="text-[11px] font-bold text-stone-300">
+                          {studentStats.totalEarnedScore} من {studentStats.totalPossibleScore} درجة
+                        </span>
+                      </div>
+
+                      <div className="bg-stone-950/60 border border-sky-500/40 p-4 rounded-2xl text-center">
+                        <span className="text-xs font-bold text-gray-400 block mb-1">امتحانات المنصة الإلكترونية</span>
+                        <span className="text-3xl font-black font-mono text-sky-400 block my-1">
+                          {studentStats.examPct}%
+                        </span>
+                        <span className="text-[11px] font-bold text-stone-300">
+                          {studentStats.examEarned} من {studentStats.examMax} ({studentStats.onlineExamsCount} اختبار)
+                        </span>
+                      </div>
+
+                      <div className="bg-stone-950/60 border border-emerald-500/40 p-4 rounded-2xl text-center">
+                        <span className="text-xs font-bold text-gray-400 block mb-1">درجات وتقييمات السنتر</span>
+                        <span className="text-3xl font-black font-mono text-emerald-400 block my-1">
+                          {studentStats.centerPct}%
+                        </span>
+                        <span className="text-[11px] font-bold text-stone-300">
+                          {studentStats.centerEarned} من {studentStats.centerMax} ({studentStats.centerRecordsCount} حصة)
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Progress Bars Breakdown */}
                     <div className="space-y-4">
                       {[
                         {
-                          name: 'التحليل الكيميائي وفهم التفاعلات 🧪',
-                          pct: Math.min(25 + (student.totalScore || 0) * 1.5, 98),
-                          color: 'bg-cyan-600',
-                          icon: '🧪'
-                        },
-                        {
-                          name: 'حفظ المعادلة والرموز الكيميائية ⚛️',
-                          pct: Math.min(30 + studentResults.length * 15, 95),
+                          name: 'النسبة المئوية التراكمية العامة 🏆',
+                          pct: studentStats.overallPercentage,
                           color: 'bg-amber-500',
-                          icon: '⚛️'
-                        },
-                        {
-                          name: 'سرعة الإجابة وحل الاختبارات ⚡',
-                          pct: studentResults.length > 0 ? 88 : 40,
-                          color: 'bg-sky-500',
-                          icon: '⚡'
-                        },
-                        {
-                          name: 'الالتزام والمواظبة على الدروس 🛡️',
-                          pct: Math.min(45 + studentResults.length * 8, 92),
-                          color: 'bg-emerald-500',
-                          icon: '🛡️'
-                        },
-                        {
-                          name: 'المشاركة الفعالة في الشات العلمي 💬',
-                          pct: 85,
-                          color: 'bg-purple-500',
-                          icon: '💬'
-                        },
-                        {
-                          name: 'نسبة التفوق الكيميائي العام 🏆',
-                          pct: studentResults.length > 0 ? Math.round((studentResults.reduce((acc, r) => acc + (r.score / r.total_questions), 0) / studentResults.length) * 100) : 50,
-                          color: 'bg-rose-500',
                           icon: '🏆'
+                        },
+                        {
+                          name: 'معدل درجات امتحانات المنصة 📝',
+                          pct: studentStats.examPct,
+                          color: 'bg-sky-500',
+                          icon: '📝'
+                        },
+                        {
+                          name: 'معدل درجات السنتر والواجبات 🏢',
+                          pct: studentStats.centerPct,
+                          color: 'bg-emerald-500',
+                          icon: '🏢'
+                        },
+                        {
+                          name: 'المواظبة وحضور الحصص والامتحانات 🛡️',
+                          pct: studentStats.onlineExamsCount + studentStats.centerRecordsCount > 0 ? 100 : 0,
+                          color: 'bg-purple-500',
+                          icon: '🛡️'
                         }
                       ].map((power, idx) => (
-                        <div key={idx} className="bg-stone-950/40 border border-gray-800/80 p-3 rounded-xl">
+                        <div key={idx} className="bg-stone-950/40 border border-gray-800/80 p-3.5 rounded-xl">
                           <div className="flex justify-between items-center mb-1.5 text-right">
-                            <span className="text-xs font-black text-gray-400 font-mono">
-                              {power.pct}% POW
+                            <span className="text-xs font-black text-amber-400 font-mono">
+                              {power.pct}%
                             </span>
                             <span className="text-xs font-black text-gray-200 flex items-center gap-1">
                               {power.icon} {power.name}
@@ -2546,7 +2719,7 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
                           <div className="w-full bg-stone-950 h-3 rounded-full overflow-hidden p-[2px] border border-gray-800">
                             <div
                               className={`${power.color} h-full rounded-full transition-all duration-700 shadow-inner`}
-                              style={{ width: `${power.pct}%` }}
+                              style={{ width: `${Math.min(power.pct, 100)}%` }}
                             />
                           </div>
                         </div>
