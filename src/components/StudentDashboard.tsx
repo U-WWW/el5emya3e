@@ -720,18 +720,29 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
       });
 
       // 2. Calculate Center Records metrics (Homework + Recitation + Exams + Comprehensive)
+      // Default scale: Homework = 2, Recitation = 3, Exam = 5 (Total = 10)
       let centerEarned = 0;
       let centerMax = 0;
       cList.forEach((cr: any) => {
         if (cr.attendance === 'حضر') {
           const hw = Number(cr.homework_degree) || 0;
-          const hwMax = Number(cr.max_homework_degree) || 10;
+          let hwMax = Number(cr.max_homework_degree);
           const rec = Number(cr.recitation_degree) || 0;
-          const recMax = Number(cr.max_recitation_degree) || 10;
+          let recMax = Number(cr.max_recitation_degree);
           const ex = Number(cr.exam_degree) || 0;
-          const exMax = Number(cr.max_exam_degree) || 20;
-          const comp = Number(cr.comprehensive_exam_degree) || 0;
-          const compMax = Number(cr.max_comprehensive_exam_degree) || (comp > 0 ? 50 : 0);
+          let exMax = Number(cr.max_exam_degree);
+          const comp = (cr.comprehensive_exam_degree !== null && cr.comprehensive_exam_degree !== undefined && cr.comprehensive_exam_degree !== '') ? (Number(cr.comprehensive_exam_degree) || 0) : 0;
+          const compMax = comp > 0 ? (Number(cr.max_comprehensive_exam_degree) || 50) : 0;
+
+          // Normalize legacy records that had 10/10/20 default or missing values:
+          if (!hwMax || (hwMax === 10 && recMax === 10 && exMax === 20 && hw <= 2 && rec <= 3 && ex <= 5)) {
+            hwMax = 2;
+            recMax = 3;
+            exMax = 5;
+          }
+          if (!hwMax) hwMax = 2;
+          if (!recMax) recMax = 3;
+          if (!exMax) exMax = 5;
 
           centerEarned += (hw + rec + ex + comp);
           centerMax += (hwMax + recMax + exMax + compMax);

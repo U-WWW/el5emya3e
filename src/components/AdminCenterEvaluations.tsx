@@ -94,10 +94,10 @@ export default function AdminCenterEvaluations() {
   const [bulkSessionNum, setBulkSessionNum] = useState<number | string>(1);
   const [isCompExam, setIsCompExam] = useState<boolean>(false);
   
-  // Custom Max Degrees per session
-  const [bulkMaxHomework, setBulkMaxHomework] = useState<number | string>(10);
-  const [bulkMaxRecitation, setBulkMaxRecitation] = useState<number | string>(10);
-  const [bulkMaxExam, setBulkMaxExam] = useState<number | string>(20);
+  // Custom Max Degrees per session - Default: Homework=2, Recitation=3, Exam=5 (Total=10)
+  const [bulkMaxHomework, setBulkMaxHomework] = useState<number | string>(2);
+  const [bulkMaxRecitation, setBulkMaxRecitation] = useState<number | string>(3);
+  const [bulkMaxExam, setBulkMaxExam] = useState<number | string>(5);
   const [bulkMaxCompExam, setBulkMaxCompExam] = useState<number | string>(50);
 
   // Local state for table evaluation entries
@@ -125,22 +125,73 @@ export default function AdminCenterEvaluations() {
     lesson_number: 1,
     attendance: 'حضر',
     homework_degree: 0,
-    max_homework_degree: 10,
+    max_homework_degree: 2,
     recitation_degree: 0,
-    max_recitation_degree: 10,
+    max_recitation_degree: 3,
     exam_degree: 0,
-    max_exam_degree: 20,
+    max_exam_degree: 5,
     comprehensive_exam_degree: '' as any,
     max_comprehensive_exam_degree: 50
   });
   const [isAddingSingleRecord, setIsAddingSingleRecord] = useState<boolean>(false);
 
-  // Load Active Month & Groups from Firestore
+  // Helper to resolve max degrees for any record (ensures 2, 3, 5 default or custom, eliminating legacy 40 total)
+  const resolveRecordMaxDegrees = (rec: any) => {
+    let hwMax = Number(rec.max_homework_degree);
+    let recMax = Number(rec.max_recitation_degree);
+    let exMax = Number(rec.max_exam_degree);
+    const compMax = (rec.comprehensive_exam_degree !== null && rec.comprehensive_exam_degree !== undefined && rec.comprehensive_exam_degree !== '')
+      ? (Number(rec.max_comprehensive_exam_degree) || 50)
+      : 0;
+
+    if (!hwMax || (hwMax === 10 && recMax === 10 && exMax === 20 && Number(rec.homework_degree) <= 2 && Number(rec.recitation_degree) <= 3 && Number(rec.exam_degree) <= 5)) {
+      hwMax = 2;
+      recMax = 3;
+      exMax = 5;
+    }
+    if (!hwMax) hwMax = 2;
+    if (!recMax) recMax = 3;
+    if (!exMax) exMax = 5;
+
+    return { hwMax, recMax, exMax, compMax };
+  };
+
+  // Load Active Month & Groups from Firestore & normalize legacy 40-pt records
   useEffect(() => {
     fetchActiveMonth();
     fetchGroups();
     fetchRegisteredStudents();
+    normalizeLegacyCenterRecords();
   }, []);
+
+  // One-time automatic normalization for legacy records that had 10/10/20 default (total 40)
+  const normalizeLegacyCenterRecords = async () => {
+    try {
+      const snap = await getDocs(collection(db, 'center_records'));
+      let batch = writeBatch(db);
+      let count = 0;
+      snap.docs.forEach(d => {
+        const data = d.data();
+        if (
+          (data.max_homework_degree === 10 && data.max_recitation_degree === 10 && data.max_exam_degree === 20) ||
+          (!data.max_homework_degree && !data.max_recitation_degree && !data.max_exam_degree)
+        ) {
+          batch.update(d.ref, {
+            max_homework_degree: 2,
+            max_recitation_degree: 3,
+            max_exam_degree: 5
+          });
+          count++;
+        }
+      });
+      if (count > 0) {
+        await batch.commit();
+        console.log(`[Center Records] Automatically normalized ${count} records from 40-point scale to 10-point scale (2/3/5).`);
+      }
+    } catch (e) {
+      console.warn("Could not normalize legacy center records:", e);
+    }
+  };
 
   const fetchActiveMonth = async () => {
     try {
@@ -341,11 +392,11 @@ export default function AdminCenterEvaluations() {
           lesson_number: Number(bulkSessionNum) || 1,
           attendance: isAbsent ? 'غاب' : 'حضر',
           homework_degree: isAbsent ? 0 : (Number(entry.homework) || 0),
-          max_homework_degree: Number(bulkMaxHomework) || 10,
+          max_homework_degree: Number(bulkMaxHomework) || 2,
           recitation_degree: isAbsent ? 0 : (Number(entry.recitation) || 0),
-          max_recitation_degree: Number(bulkMaxRecitation) || 10,
+          max_recitation_degree: Number(bulkMaxRecitation) || 3,
           exam_degree: isAbsent ? 0 : (Number(entry.exam) || 0),
-          max_exam_degree: Number(bulkMaxExam) || 20,
+          max_exam_degree: Number(bulkMaxExam) || 5,
           comprehensive_exam_degree: isAbsent ? 0 : (isCompExam ? (Number(entry.compExam) || 0) : null),
           max_comprehensive_exam_degree: isCompExam ? (Number(bulkMaxCompExam) || 50) : null,
           createdAt: new Date().toISOString()
@@ -414,11 +465,11 @@ export default function AdminCenterEvaluations() {
         lesson_number: Number(bulkSessionNum) || 1,
         attendance: isAbsent ? 'غاب' : 'حضر',
         homework_degree: isAbsent ? 0 : (Number(entry.homework) || 0),
-        max_homework_degree: Number(bulkMaxHomework) || 10,
+        max_homework_degree: Number(bulkMaxHomework) || 2,
         recitation_degree: isAbsent ? 0 : (Number(entry.recitation) || 0),
-        max_recitation_degree: Number(bulkMaxRecitation) || 10,
+        max_recitation_degree: Number(bulkMaxRecitation) || 3,
         exam_degree: isAbsent ? 0 : (Number(entry.exam) || 0),
-        max_exam_degree: Number(bulkMaxExam) || 20,
+        max_exam_degree: Number(bulkMaxExam) || 5,
         comprehensive_exam_degree: isAbsent ? 0 : (isCompExam ? (Number(entry.compExam) || 0) : null),
         max_comprehensive_exam_degree: isCompExam ? (Number(bulkMaxCompExam) || 50) : null,
         createdAt: new Date().toISOString()
@@ -449,11 +500,11 @@ export default function AdminCenterEvaluations() {
         lesson_number: Number(newSingleRecord.lesson_number) || 1,
         attendance: newSingleRecord.attendance,
         homework_degree: isAbsent ? 0 : (Number(newSingleRecord.homework_degree) || 0),
-        max_homework_degree: Number(newSingleRecord.max_homework_degree) || 10,
+        max_homework_degree: Number(newSingleRecord.max_homework_degree) || 2,
         recitation_degree: isAbsent ? 0 : (Number(newSingleRecord.recitation_degree) || 0),
-        max_recitation_degree: Number(newSingleRecord.max_recitation_degree) || 10,
+        max_recitation_degree: Number(newSingleRecord.max_recitation_degree) || 3,
         exam_degree: isAbsent ? 0 : (Number(newSingleRecord.exam_degree) || 0),
-        max_exam_degree: Number(newSingleRecord.max_exam_degree) || 20,
+        max_exam_degree: Number(newSingleRecord.max_exam_degree) || 5,
         comprehensive_exam_degree: isAbsent ? 0 : (newSingleRecord.comprehensive_exam_degree !== '' ? (Number(newSingleRecord.comprehensive_exam_degree) || 0) : null),
         max_comprehensive_exam_degree: newSingleRecord.comprehensive_exam_degree !== '' ? (Number(newSingleRecord.max_comprehensive_exam_degree) || 50) : null,
         createdAt: new Date().toISOString()
@@ -478,11 +529,11 @@ export default function AdminCenterEvaluations() {
       await updateDoc(doc(db, 'center_records', editingRecord.id), {
         attendance: editingRecord.attendance,
         homework_degree: isAbsent ? 0 : (Number(editingRecord.homework_degree) || 0),
-        max_homework_degree: Number(editingRecord.max_homework_degree) || 10,
+        max_homework_degree: Number(editingRecord.max_homework_degree) || 2,
         recitation_degree: isAbsent ? 0 : (Number(editingRecord.recitation_degree) || 0),
-        max_recitation_degree: Number(editingRecord.max_recitation_degree) || 10,
+        max_recitation_degree: Number(editingRecord.max_recitation_degree) || 3,
         exam_degree: isAbsent ? 0 : (Number(editingRecord.exam_degree) || 0),
-        max_exam_degree: Number(editingRecord.max_exam_degree) || 20,
+        max_exam_degree: Number(editingRecord.max_exam_degree) || 5,
         comprehensive_exam_degree: isAbsent ? 0 : (editingRecord.comprehensive_exam_degree !== null && editingRecord.comprehensive_exam_degree !== '' ? (Number(editingRecord.comprehensive_exam_degree) || 0) : null),
         max_comprehensive_exam_degree: editingRecord.comprehensive_exam_degree !== null && editingRecord.comprehensive_exam_degree !== '' ? (Number(editingRecord.max_comprehensive_exam_degree) || 50) : null,
         lesson_number: Number(editingRecord.lesson_number) || 1,
@@ -537,22 +588,24 @@ export default function AdminCenterEvaluations() {
       msg += `\n`;
 
       if (lastRecord) {
-        const maxHw = lastRecord.max_homework_degree || 10;
-        const maxRec = lastRecord.max_recitation_degree || 10;
-        const maxEx = lastRecord.max_exam_degree || 20;
-        const maxComp = lastRecord.max_comprehensive_exam_degree || 50;
+        const { hwMax, recMax, exMax, compMax } = resolveRecordMaxDegrees(lastRecord);
 
         msg += `📝 *بيانات تقييم أحدث حصة (${lastRecord.lesson_date || 'غير محدد'} - حصة رقم ${lastRecord.lesson_number || 1}):*\n`;
         msg += `• 👤 *الحالة:* ${lastRecord.attendance === 'حضر' ? '✅ حضر' : '❌ غاب'}\n`;
         if (lastRecord.attendance === 'حضر') {
-          msg += `• 📚 *درجة الواجب:* ${lastRecord.homework_degree ?? 0} / ${maxHw}\n`;
-          msg += `• 🗣️ *درجة التسميع:* ${lastRecord.recitation_degree ?? 0} / ${maxRec}\n`;
-          msg += `• ✍️ *درجة الامتحان:* ${lastRecord.exam_degree ?? 0} / ${maxEx}\n`;
-          if (lastRecord.comprehensive_exam_degree !== null && lastRecord.comprehensive_exam_degree !== undefined && lastRecord.comprehensive_exam_degree !== '') {
-            msg += `• 🌟 *الامتحان الشامل:* ${lastRecord.comprehensive_exam_degree} / ${maxComp}\n`;
+          const hwEarned = Number(lastRecord.homework_degree) || 0;
+          const recEarned = Number(lastRecord.recitation_degree) || 0;
+          const exEarned = Number(lastRecord.exam_degree) || 0;
+          const compEarned = (lastRecord.comprehensive_exam_degree !== null && lastRecord.comprehensive_exam_degree !== undefined && lastRecord.comprehensive_exam_degree !== '') ? Number(lastRecord.comprehensive_exam_degree) : 0;
+
+          msg += `• 📚 *درجة الواجب:* ${hwEarned} / ${hwMax}\n`;
+          msg += `• 🗣️ *درجة التسميع:* ${recEarned} / ${recMax}\n`;
+          msg += `• ✍️ *درجة الامتحان:* ${exEarned} / ${exMax}\n`;
+          if (compMax > 0) {
+            msg += `• 🌟 *الامتحان الشامل:* ${compEarned} / ${compMax}\n`;
           }
-          const sessionTotal = (Number(lastRecord.homework_degree) || 0) + (Number(lastRecord.recitation_degree) || 0) + (Number(lastRecord.exam_degree) || 0) + (Number(lastRecord.comprehensive_exam_degree) || 0);
-          const sessionMaxTotal = maxHw + maxRec + maxEx + (lastRecord.comprehensive_exam_degree ? maxComp : 0);
+          const sessionTotal = hwEarned + recEarned + exEarned + compEarned;
+          const sessionMaxTotal = hwMax + recMax + exMax + compMax;
           msg += `• 🎯 *مجموع تقييم الحصة:* ${sessionTotal} / ${sessionMaxTotal}\n`;
         }
       } else {
@@ -830,9 +883,9 @@ export default function AdminCenterEvaluations() {
 
         {/* Custom Max Degrees Controls Bar */}
         <div className="bg-stone-950/80 border border-amber-500/20 p-3.5 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-1.5 font-bold text-amber-400">
+          <div className="flex items-center gap-2 font-bold text-amber-400">
             <Sliders className="w-4 h-4" />
-            <span>تخصيص الدرجات النهائية (العظمى) لهذه الحصة:</span>
+            <span>الدرجات النهائية العظمى للحصة (الافتراضي: واجب 2 + تسميع 3 + امتحان 5 = 10):</span>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-1.5 bg-stone-900 border border-stone-700 px-2.5 py-1 rounded-xl">
@@ -873,6 +926,12 @@ export default function AdminCenterEvaluations() {
                 />
               </div>
             )}
+            <div className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/30 px-3 py-1 rounded-xl text-amber-300 font-bold">
+              <span>إجمالي الحصة:</span>
+              <span className="font-mono text-white text-sm">
+                {(Number(bulkMaxHomework) || 0) + (Number(bulkMaxRecitation) || 0) + (Number(bulkMaxExam) || 0) + (isCompExam ? (Number(bulkMaxCompExam) || 0) : 0)} درجة
+              </span>
+            </div>
           </div>
         </div>
 
@@ -933,7 +992,7 @@ export default function AdminCenterEvaluations() {
                           disabled={isAbsent}
                           value={isAbsent ? 0 : (entry.homework ?? '')}
                           onChange={(e) => handleBulkEntryChange(key, 'homework', e.target.value)}
-                          placeholder="0-10"
+                          placeholder={`0-${bulkMaxHomework}`}
                           className="w-16 bg-stone-950 border border-stone-700 rounded-lg p-1.5 text-center font-mono font-bold text-cyan-300 outline-none focus:border-cyan-500 disabled:opacity-30"
                         />
                       </td>
@@ -945,7 +1004,7 @@ export default function AdminCenterEvaluations() {
                           disabled={isAbsent}
                           value={isAbsent ? 0 : (entry.recitation ?? '')}
                           onChange={(e) => handleBulkEntryChange(key, 'recitation', e.target.value)}
-                          placeholder="0-10"
+                          placeholder={`0-${bulkMaxRecitation}`}
                           className="w-16 bg-stone-950 border border-stone-700 rounded-lg p-1.5 text-center font-mono font-bold text-indigo-300 outline-none focus:border-indigo-500 disabled:opacity-30"
                         />
                       </td>
@@ -957,7 +1016,7 @@ export default function AdminCenterEvaluations() {
                           disabled={isAbsent}
                           value={isAbsent ? 0 : (entry.exam ?? '')}
                           onChange={(e) => handleBulkEntryChange(key, 'exam', e.target.value)}
-                          placeholder="0-20"
+                          placeholder={`0-${bulkMaxExam}`}
                           className="w-16 bg-stone-950 border border-stone-700 rounded-lg p-1.5 text-center font-mono font-bold text-amber-300 outline-none focus:border-amber-500 disabled:opacity-30"
                         />
                       </td>
@@ -970,7 +1029,7 @@ export default function AdminCenterEvaluations() {
                             disabled={isAbsent}
                             value={isAbsent ? 0 : (entry.compExam ?? '')}
                             onChange={(e) => handleBulkEntryChange(key, 'compExam', e.target.value)}
-                            placeholder="0-50"
+                            placeholder={`0-${bulkMaxCompExam}`}
                             className="w-16 bg-amber-950/60 border border-amber-500/50 rounded-lg p-1.5 text-center font-mono font-bold text-amber-300 outline-none focus:border-amber-400 disabled:opacity-30"
                           />
                         </td>
@@ -1294,27 +1353,45 @@ export default function AdminCenterEvaluations() {
                           {rec.attendance}
                         </span>
                       </div>
-                      {rec.attendance === 'حضر' && (
-                        <div className="flex flex-wrap gap-3 text-[11px] text-stone-300 font-mono mt-1">
-                          <span>واجب: {rec.homework_degree}/{rec.max_homework_degree || 10}</span>
-                          <span>تسميع: {rec.recitation_degree}/{rec.max_recitation_degree || 10}</span>
-                          <span>امتحان: {rec.exam_degree}/{rec.max_exam_degree || 20}</span>
-                          {rec.comprehensive_exam_degree !== null && rec.comprehensive_exam_degree !== undefined && rec.comprehensive_exam_degree !== '' && (
-                            <span>شامل: {rec.comprehensive_exam_degree}/{rec.max_comprehensive_exam_degree || 50}</span>
-                          )}
-                        </div>
-                      )}
+                      {rec.attendance === 'حضر' && (() => {
+                        const { hwMax, recMax, exMax, compMax } = resolveRecordMaxDegrees(rec);
+                        const hw = Number(rec.homework_degree) || 0;
+                        const rc = Number(rec.recitation_degree) || 0;
+                        const ex = Number(rec.exam_degree) || 0;
+                        const comp = (rec.comprehensive_exam_degree !== null && rec.comprehensive_exam_degree !== undefined && rec.comprehensive_exam_degree !== '') ? Number(rec.comprehensive_exam_degree) : 0;
+                        const total = hw + rc + ex + comp;
+                        const totalMax = hwMax + recMax + exMax + compMax;
+
+                        return (
+                          <div className="space-y-1 mt-1">
+                            <div className="flex flex-wrap gap-3 text-[11px] text-stone-300 font-mono">
+                              <span>واجب: <strong className="text-cyan-300">{hw}/{hwMax}</strong></span>
+                              <span>تسميع: <strong className="text-indigo-300">{rc}/{recMax}</strong></span>
+                              <span>امتحان: <strong className="text-amber-300">{ex}/{exMax}</strong></span>
+                              {compMax > 0 && (
+                                <span>شامل: <strong className="text-emerald-300">{comp}/{compMax}</strong></span>
+                              )}
+                            </div>
+                            <div className="text-[11px] font-bold text-amber-400">
+                              مجموع درجات الحصة: {total} من {totalMax} درجة
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     <div className="flex items-center gap-1.5">
                       <button
-                        onClick={() => setEditingRecord({
-                          ...rec,
-                          max_homework_degree: rec.max_homework_degree || 10,
-                          max_recitation_degree: rec.max_recitation_degree || 10,
-                          max_exam_degree: rec.max_exam_degree || 20,
-                          max_comprehensive_exam_degree: rec.max_comprehensive_exam_degree || 50
-                        })}
+                        onClick={() => {
+                          const { hwMax, recMax, exMax, compMax } = resolveRecordMaxDegrees(rec);
+                          setEditingRecord({
+                            ...rec,
+                            max_homework_degree: hwMax,
+                            max_recitation_degree: recMax,
+                            max_exam_degree: exMax,
+                            max_comprehensive_exam_degree: compMax || 50
+                          });
+                        }}
                         className="px-2.5 py-1 text-amber-400 bg-amber-950/60 hover:bg-amber-900/80 border border-amber-800/80 rounded-xl transition flex items-center gap-1 text-[11px] font-bold"
                         title="تعديل هذا التقييم الفردي"
                       >
@@ -1419,8 +1496,8 @@ export default function AdminCenterEvaluations() {
                     />
                     <input
                       type="number"
-                      placeholder="الدرجة العظمى (مثلاً 10)"
-                      value={editingRecord.max_homework_degree ?? 10}
+                      placeholder="الدرجة العظمى (افتراضي 2)"
+                      value={editingRecord.max_homework_degree ?? 2}
                       onChange={(e) => setEditingRecord({ ...editingRecord, max_homework_degree: e.target.value })}
                       className="w-full bg-stone-900 border border-stone-700 rounded-xl p-2 font-bold text-stone-300 outline-none focus:border-cyan-500 font-mono text-center"
                     />
@@ -1442,8 +1519,8 @@ export default function AdminCenterEvaluations() {
                     />
                     <input
                       type="number"
-                      placeholder="الدرجة العظمى (مثلاً 10)"
-                      value={editingRecord.max_recitation_degree ?? 10}
+                      placeholder="الدرجة العظمى (افتراضي 3)"
+                      value={editingRecord.max_recitation_degree ?? 3}
                       onChange={(e) => setEditingRecord({ ...editingRecord, max_recitation_degree: e.target.value })}
                       className="w-full bg-stone-900 border border-stone-700 rounded-xl p-2 font-bold text-stone-300 outline-none focus:border-indigo-500 font-mono text-center"
                     />
@@ -1465,8 +1542,8 @@ export default function AdminCenterEvaluations() {
                     />
                     <input
                       type="number"
-                      placeholder="الدرجة العظمى (مثلاً 20)"
-                      value={editingRecord.max_exam_degree ?? 20}
+                      placeholder="الدرجة العظمى (افتراضي 5)"
+                      value={editingRecord.max_exam_degree ?? 5}
                       onChange={(e) => setEditingRecord({ ...editingRecord, max_exam_degree: e.target.value })}
                       className="w-full bg-stone-900 border border-stone-700 rounded-xl p-2 font-bold text-stone-300 outline-none focus:border-amber-500 font-mono text-center"
                     />
@@ -1600,7 +1677,7 @@ export default function AdminCenterEvaluations() {
                     />
                     <input
                       type="number"
-                      placeholder="الدرجة العظمى (مثلاً 10)"
+                      placeholder="الدرجة العظمى (افتراضي 2)"
                       value={newSingleRecord.max_homework_degree}
                       onChange={(e) => setNewSingleRecord({ ...newSingleRecord, max_homework_degree: Number(e.target.value) })}
                       className="w-full bg-stone-900 border border-stone-700 rounded-xl p-2 font-bold text-stone-300 outline-none focus:border-cyan-500 font-mono text-center"
@@ -1623,7 +1700,7 @@ export default function AdminCenterEvaluations() {
                     />
                     <input
                       type="number"
-                      placeholder="الدرجة العظمى (مثلاً 10)"
+                      placeholder="الدرجة العظمى (افتراضي 3)"
                       value={newSingleRecord.max_recitation_degree}
                       onChange={(e) => setNewSingleRecord({ ...newSingleRecord, max_recitation_degree: Number(e.target.value) })}
                       className="w-full bg-stone-900 border border-stone-700 rounded-xl p-2 font-bold text-stone-300 outline-none focus:border-indigo-500 font-mono text-center"
@@ -1646,7 +1723,7 @@ export default function AdminCenterEvaluations() {
                     />
                     <input
                       type="number"
-                      placeholder="الدرجة العظمى (مثلاً 20)"
+                      placeholder="الدرجة العظمى (افتراضي 5)"
                       value={newSingleRecord.max_exam_degree}
                       onChange={(e) => setNewSingleRecord({ ...newSingleRecord, max_exam_degree: Number(e.target.value) })}
                       className="w-full bg-stone-900 border border-stone-700 rounded-xl p-2 font-bold text-stone-300 outline-none focus:border-amber-500 font-mono text-center"

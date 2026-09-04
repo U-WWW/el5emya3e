@@ -159,29 +159,48 @@ export default function AlchemiyaStudentDashboard({ currentStudent, onClose }: C
     return studentRecords.filter(r => r.lesson_month === selectedMonth);
   }, [studentRecords, selectedMonth]);
 
-  // Compute stats and relative percentage for the selected month
+  // Compute stats and actual percentage for the selected month
   const computedStats = useMemo(() => {
     const records = filteredMonthRecords;
     const totalLessons = records.length;
     let attendedLessons = 0;
     let absentLessons = 0;
     let totalEarned = 0;
+    let totalMaxPossible = 0;
 
     records.forEach(r => {
       if (r.attendance === 'حضر') {
         attendedLessons++;
-        totalEarned += (Number(r.homework_degree) || 0) +
-                       (Number(r.recitation_degree) || 0) +
-                       (Number(r.exam_degree) || 0) +
-                       (Number(r.comprehensive_exam_degree) || 0);
+        const hw = Number(r.homework_degree) || 0;
+        let hwMax = Number(r.max_homework_degree);
+        const rec = Number(r.recitation_degree) || 0;
+        let recMax = Number(r.max_recitation_degree);
+        const ex = Number(r.exam_degree) || 0;
+        let exMax = Number(r.max_exam_degree);
+        const comp = (r.comprehensive_exam_degree !== null && r.comprehensive_exam_degree !== undefined && r.comprehensive_exam_degree !== '') ? (Number(r.comprehensive_exam_degree) || 0) : 0;
+        const compMax = comp > 0 ? (Number(r.max_comprehensive_exam_degree) || 50) : 0;
+
+        // Normalize legacy records that had 10/10/20 default or missing values:
+        if (!hwMax || (hwMax === 10 && recMax === 10 && exMax === 20 && hw <= 2 && rec <= 3 && ex <= 5)) {
+          hwMax = 2;
+          recMax = 3;
+          exMax = 5;
+        }
+        if (!hwMax) hwMax = 2;
+        if (!recMax) recMax = 3;
+        if (!exMax) exMax = 5;
+
+        totalEarned += (hw + rec + ex + comp);
+        totalMaxPossible += (hwMax + recMax + exMax + compMax);
       } else {
         absentLessons++;
       }
     });
 
     const attendanceRate = totalLessons > 0 ? Math.round((attendedLessons / totalLessons) * 100) : 100;
+    const academicPercentage = totalMaxPossible > 0 ? Math.min(100, Math.round((totalEarned / totalMaxPossible) * 100)) : (totalEarned > 0 ? 100 : 0);
 
-    // Calculate group scores for ranking and max score
+    // Calculate group scores for ranking
     const monthGroupRecords = groupRecords.filter(r => r.lesson_month === selectedMonth);
     const studentTotalScores: { [key: string]: number } = {};
 
@@ -196,27 +215,19 @@ export default function AlchemiyaStudentDashboard({ currentStudent, onClose }: C
       }
     });
 
-    // Determine group max score
-    const groupScores = Object.values(studentTotalScores);
-    const groupMaxScore = groupScores.length > 0 ? Math.max(...groupScores) : (totalEarned > 0 ? totalEarned : 100);
-
-    // Relative percentage based on top student in group
-    const baseGroupMax = groupMaxScore > 0 ? groupMaxScore : 100;
-    const relativePercentage = totalEarned > 0 ? Math.min(100, Math.round((totalEarned / baseGroupMax) * 100)) : 0;
-
     // Calculate rank
     const sortedScores = Object.entries(studentTotalScores).sort(([, a], [, b]) => b - a);
     const myRankIndex = sortedScores.findIndex(([code]) => code === studentCode || code === studentName);
     const groupRank = myRankIndex !== -1 ? myRankIndex + 1 : 1;
     const totalStudentsInGroup = Math.max(sortedScores.length, 1);
 
-    // Performance Tier
+    // Performance Tier based on student's actual score percentage
     let tierColor: 'emerald' | 'amber' | 'rose' = 'emerald';
     let tierLabel = 'ممتاز جداً 🌟';
-    if (relativePercentage < 50) {
+    if (academicPercentage < 50) {
       tierColor = 'rose';
       tierLabel = 'يحتاج لمتابعة وتحسين ⚠️';
-    } else if (relativePercentage < 85) {
+    } else if (academicPercentage < 85) {
       tierColor = 'amber';
       tierLabel = 'جيد ويسعى للأفضل 📈';
     }
@@ -227,8 +238,8 @@ export default function AlchemiyaStudentDashboard({ currentStudent, onClose }: C
       absentLessons,
       attendanceRate,
       totalEarned,
-      groupMaxScore: baseGroupMax,
-      relativePercentage,
+      totalMaxPossible,
+      academicPercentage,
       groupRank,
       totalStudentsInGroup,
       tierColor,
@@ -330,7 +341,7 @@ export default function AlchemiyaStudentDashboard({ currentStudent, onClose }: C
         <>
           {/* Main Hero Metrics Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {/* 1. Relative Performance Level */}
+            {/* 1. Academic Performance Level */}
             <motion.div
               whileHover={{ scale: 1.02 }}
               className={`p-6 rounded-3xl border-2 relative overflow-hidden shadow-xl ${
@@ -345,20 +356,25 @@ export default function AlchemiyaStudentDashboard({ currentStudent, onClose }: C
                 <div className="p-3 bg-white/10 rounded-2xl text-cyan-300">
                   <Zap className="w-6 h-6" />
                 </div>
-                <span className="text-3xl font-black font-mono text-white">
-                  {computedStats.relativePercentage}%
-                </span>
+                <div className="text-left">
+                  <span className="text-3xl font-black font-mono text-white">
+                    {computedStats.academicPercentage}%
+                  </span>
+                  <div className="text-[11px] font-mono font-bold text-cyan-300">
+                    {computedStats.totalEarned} / {computedStats.totalMaxPossible} درجة
+                  </div>
+                </div>
               </div>
-              <h4 className="text-xs font-bold text-slate-300">النسبة المئوية النسبية للمجموعة</h4>
+              <h4 className="text-xs font-bold text-slate-300">النسبة الأكاديمية للشهر</h4>
               <p className="text-xs font-semibold mt-1 text-slate-200">
-                {computedStats.tierLabel}
+                {computedStats.tierLabel} ({computedStats.totalEarned} من {computedStats.totalMaxPossible} درجة)
               </p>
               <div className="w-full bg-slate-800 h-2 rounded-full mt-3 overflow-hidden">
                 <div
                   className={`h-full transition-all duration-1000 ${
                     computedStats.tierColor === 'emerald' ? 'bg-emerald-400' : computedStats.tierColor === 'amber' ? 'bg-amber-400' : 'bg-rose-400'
                   }`}
-                  style={{ width: `${computedStats.relativePercentage}%` }}
+                  style={{ width: `${computedStats.academicPercentage}%` }}
                 ></div>
               </div>
             </motion.div>
@@ -475,37 +491,72 @@ export default function AlchemiyaStudentDashboard({ currentStudent, onClose }: C
                         </span>
                       </div>
 
-                      {isAttended ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-center">
-                          <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
-                            <span className="text-[10px] text-slate-400 block font-bold mb-0.5">الواجب</span>
-                            <span className="text-sm font-black font-mono text-cyan-300">
-                              {record.homework_degree ?? 0} <span className="text-[10px] text-slate-500 font-normal">/{record.max_homework_degree || 10}</span>
-                            </span>
-                          </div>
+                      {isAttended ? (() => {
+                        const hw = Number(record.homework_degree) || 0;
+                        let hwMax = Number(record.max_homework_degree);
+                        const rec = Number(record.recitation_degree) || 0;
+                        let recMax = Number(record.max_recitation_degree);
+                        const ex = Number(record.exam_degree) || 0;
+                        let exMax = Number(record.max_exam_degree);
+                        const comp = (record.comprehensive_exam_degree !== null && record.comprehensive_exam_degree !== undefined && record.comprehensive_exam_degree !== '') ? (Number(record.comprehensive_exam_degree) || 0) : 0;
+                        const compMax = comp > 0 ? (Number(record.max_comprehensive_exam_degree) || 50) : 0;
 
-                          <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
-                            <span className="text-[10px] text-slate-400 block font-bold mb-0.5">التسميع</span>
-                            <span className="text-sm font-black font-mono text-indigo-300">
-                              {record.recitation_degree ?? 0} <span className="text-[10px] text-slate-500 font-normal">/{record.max_recitation_degree || 10}</span>
-                            </span>
-                          </div>
+                        if (!hwMax || (hwMax === 10 && recMax === 10 && exMax === 20 && hw <= 2 && rec <= 3 && ex <= 5)) {
+                          hwMax = 2;
+                          recMax = 3;
+                          exMax = 5;
+                        }
+                        if (!hwMax) hwMax = 2;
+                        if (!recMax) recMax = 3;
+                        if (!exMax) exMax = 5;
 
-                          <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
-                            <span className="text-[10px] text-slate-400 block font-bold mb-0.5">امتحان الحصة</span>
-                            <span className="text-sm font-black font-mono text-amber-300">
-                              {record.exam_degree ?? 0} <span className="text-[10px] text-slate-500 font-normal">/{record.max_exam_degree || 20}</span>
-                            </span>
-                          </div>
+                        const sessionEarned = hw + rec + ex + comp;
+                        const sessionMax = hwMax + recMax + exMax + compMax;
+                        const sessionPct = sessionMax > 0 ? Math.round((sessionEarned / sessionMax) * 100) : 0;
 
-                          <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
-                            <span className="text-[10px] text-cyan-400 block font-bold mb-0.5">الامتحان الشامل</span>
-                            <span className="text-sm font-black font-mono text-emerald-300">
-                              {record.comprehensive_exam_degree !== null && record.comprehensive_exam_degree !== undefined && record.comprehensive_exam_degree !== '' ? `${record.comprehensive_exam_degree} /${record.max_comprehensive_exam_degree || 50}` : '-'}
-                            </span>
+                        return (
+                          <div className="space-y-2.5">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-center">
+                              <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                                <span className="text-[10px] text-slate-400 block font-bold mb-0.5">الواجب</span>
+                                <span className="text-sm font-black font-mono text-cyan-300">
+                                  {hw} <span className="text-[10px] text-slate-500 font-normal">/{hwMax}</span>
+                                </span>
+                              </div>
+
+                              <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                                <span className="text-[10px] text-slate-400 block font-bold mb-0.5">التسميع</span>
+                                <span className="text-sm font-black font-mono text-indigo-300">
+                                  {rec} <span className="text-[10px] text-slate-500 font-normal">/{recMax}</span>
+                                </span>
+                              </div>
+
+                              <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                                <span className="text-[10px] text-slate-400 block font-bold mb-0.5">امتحان الحصة</span>
+                                <span className="text-sm font-black font-mono text-amber-300">
+                                  {ex} <span className="text-[10px] text-slate-500 font-normal">/{exMax}</span>
+                                </span>
+                              </div>
+
+                              <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                                <span className="text-[10px] text-cyan-400 block font-bold mb-0.5">الامتحان الشامل</span>
+                                <span className="text-sm font-black font-mono text-emerald-300">
+                                  {compMax > 0 ? `${comp} /${compMax}` : '-'}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Total for this specific session */}
+                            <div className="flex justify-between items-center bg-slate-950/90 border border-slate-800/80 px-3 py-2 rounded-xl text-xs font-bold">
+                              <span className="text-slate-300">مجموع درجات الحصة:</span>
+                              <span className="font-mono text-amber-400 font-black">
+                                {sessionEarned} من {sessionMax} درجة
+                                <span className="text-slate-400 font-normal text-[11px] mr-2">({sessionPct}%)</span>
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      ) : (
+                        );
+                      })() : (
                         <div className="bg-rose-950/40 p-3 rounded-xl border border-rose-900/50 text-center">
                           <p className="text-xs text-rose-300 font-bold">
                             تم تسجيل غياب في هذه الحصة، وبالتالي تم إلغاء درجات الحصة.
