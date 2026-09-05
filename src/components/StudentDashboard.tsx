@@ -158,7 +158,7 @@ interface StudentDashboardProps {
   onThemeChange?: (theme: any) => void;
 }
 
-export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dark', onThemeChange }: StudentDashboardProps) {
+export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_light', onThemeChange }: StudentDashboardProps) {
   // Authentication & Registration state
   const [student, setStudent] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -2636,10 +2636,23 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_dar
                         اختر السمة البصرية والخلفية العلمية المناسبة لدراستك
                       </p>
                     </div>
-                    <div className="grid grid-cols-3 gap-3">
-                      <button onClick={() => onThemeChange?.('khemiai_dark')} className={`p-4 rounded-xl border-2 font-black transition flex flex-col justify-center items-center gap-2 ${currentTheme === 'khemiai_dark' ? 'border-cyan-500 bg-cyan-500/20 text-cyan-400' : 'border-stone-800 bg-stone-900 hover:bg-stone-800 text-stone-500'}`}><Palette className="w-8 h-8"/>المختبر الكيميائي</button>
-                      <button onClick={() => onThemeChange?.('atomic_glow')} className={`p-4 rounded-xl border-2 font-black transition flex flex-col justify-center items-center gap-2 ${currentTheme === 'atomic_glow' ? 'border-amber-500 bg-amber-500/20 text-amber-400' : 'border-stone-800 bg-stone-900 hover:bg-stone-800 text-stone-500'}`}><Sparkles className="w-8 h-8"/>التفاعل الذري</button>
-                      <button onClick={() => onThemeChange?.('deep_emerald')} className={`p-4 rounded-xl border-2 font-black transition flex flex-col justify-center items-center gap-2 ${currentTheme === 'deep_emerald' ? 'border-emerald-500 bg-emerald-500/20 text-emerald-400' : 'border-stone-800 bg-stone-900 hover:bg-stone-800 text-stone-500'}`}><Cpu className="w-8 h-8"/>الزمرد الكيميائي</button>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <button onClick={() => onThemeChange?.('khemiai_light')} className={`p-4 rounded-xl border-2 font-black transition flex flex-col justify-center items-center gap-2 ${currentTheme === 'khemiai_light' ? 'border-amber-500 bg-amber-500/20 text-amber-500' : 'border-slate-300 dark:border-stone-800 bg-white dark:bg-stone-900 text-slate-600 dark:text-stone-500'}`}>
+                        <Sparkles className="w-7 h-7 text-amber-500"/>
+                        الوضع النهاري (لايت) ☀️
+                      </button>
+                      <button onClick={() => onThemeChange?.('khemiai_dark')} className={`p-4 rounded-xl border-2 font-black transition flex flex-col justify-center items-center gap-2 ${currentTheme === 'khemiai_dark' ? 'border-cyan-500 bg-cyan-500/20 text-cyan-500' : 'border-slate-300 dark:border-stone-800 bg-white dark:bg-stone-900 text-slate-600 dark:text-stone-500'}`}>
+                        <Palette className="w-7 h-7 text-cyan-500"/>
+                        المختبر الليلي (دارك) 🧪
+                      </button>
+                      <button onClick={() => onThemeChange?.('atomic_glow')} className={`p-4 rounded-xl border-2 font-black transition flex flex-col justify-center items-center gap-2 ${currentTheme === 'atomic_glow' ? 'border-amber-500 bg-amber-500/20 text-amber-500' : 'border-slate-300 dark:border-stone-800 bg-white dark:bg-stone-900 text-slate-600 dark:text-stone-500'}`}>
+                        <Zap className="w-7 h-7 text-amber-500"/>
+                        التفاعل الذري ⚡
+                      </button>
+                      <button onClick={() => onThemeChange?.('deep_emerald')} className={`p-4 rounded-xl border-2 font-black transition flex flex-col justify-center items-center gap-2 ${currentTheme === 'deep_emerald' ? 'border-emerald-500 bg-emerald-500/20 text-emerald-500' : 'border-slate-300 dark:border-stone-800 bg-white dark:bg-stone-900 text-slate-600 dark:text-stone-500'}`}>
+                        <Cpu className="w-7 h-7 text-emerald-500"/>
+                        الزمرد الكيميائي 💎
+                      </button>
                     </div>
                   </div>
 
