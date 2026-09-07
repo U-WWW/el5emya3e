@@ -40,6 +40,7 @@ import {
   Cpu,
   Clock,
   Sparkles,
+  RefreshCw,
   Gamepad2,
   Home,
   MessageCircle,
@@ -174,6 +175,9 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_lig
   const [loginError, setLoginError] = useState('');
   const [isSubmittingLogin, setIsSubmittingLogin] = useState(false);
   const [newlyRegisteredStudent, setNewlyRegisteredStudent] = useState<any>(null);
+  const [pendingStudent, setPendingStudent] = useState<any>(null);
+  const [isCheckingApproval, setIsCheckingApproval] = useState(false);
+  const [approvalStatusMessage, setApprovalStatusMessage] = useState('');
   const [legacyStudentNeedPassword, setLegacyStudentNeedPassword] = useState<any>(null);
   const [newPassword, setNewPassword] = useState('');
   const [showLoginPassword, setShowLoginPassword] = useState(false);
@@ -549,6 +553,65 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_lig
     }
   };
 
+  // Check pending student approval status
+  const checkPendingApprovalStatus = async (pendingObj?: any, showNotice = true) => {
+    const target = pendingObj || pendingStudent;
+    if (!target || !target.code) return;
+
+    setIsCheckingApproval(true);
+    setApprovalStatusMessage('');
+
+    try {
+      const q = query(collection(db, 'students'), where('code', '==', target.code));
+      const snap = await getDocs(q);
+
+      if (snap.empty) {
+        if (showNotice) {
+          setApprovalStatusMessage('لم يتم العثور على هذا الحساب في قاعدة البيانات، قد يكون تم حذفه من قِبل الإدارة.');
+        }
+        setIsCheckingApproval(false);
+        return;
+      }
+
+      const docData = snap.docs[0].data();
+      const isApproved = docData.status === 'approved' || docData.is_approved === true;
+
+      if (isApproved) {
+        // Successfully Approved by Admin!
+        const approvedSession = {
+          id: snap.docs[0].id,
+          name: docData.name,
+          code: target.code,
+          phone: docData.phone,
+          className: docData.class_name || docData.className,
+          groupName: docData.group_name || docData.groupName,
+          totalScore: docData.total_score || 0,
+          badges: docData.badges || ['Iron Recruit'],
+          avatar: docData.avatar || 'spiderman'
+        };
+
+        localStorage.removeItem('khemiai_pending_student');
+        localStorage.setItem('jamal_student', JSON.stringify(approvedSession));
+        setPendingStudent(null);
+        setNewlyRegisteredStudent(null);
+        setStudent(approvedSession);
+        setSelectedAvatar(approvedSession.avatar);
+        await fetchStudentData(approvedSession.code, approvedSession.className);
+        alert('مبارك يا بطل! 🎉 تم قبول واعتماد حسابك بنجاح من مستر الخيميائي. تم فتح بوابات المنصة لك!');
+      } else {
+        if (showNotice) {
+          setApprovalStatusMessage('طلبك لا يزال قيد المراجعة والاعتماد من مستر الخيميائي ⏳ برجاء الانتظار قليلاً أو التواصل مع المستر لتفعيل حسابك.');
+        }
+      }
+    } catch (err: any) {
+      if (showNotice) {
+        setApprovalStatusMessage('خطأ أثناء فحص حالة الاعتماد: ' + err.message);
+      }
+    } finally {
+      setIsCheckingApproval(false);
+    }
+  };
+
   // Load existing session
   useEffect(() => {
     const savedStudent = localStorage.getItem('jamal_student');
@@ -563,6 +626,18 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_lig
       setSelectedAvatar(parsed.avatar || 'spiderman');
       fetchStudentData(parsed.code, parsed.className);
     } else {
+      // Check if there is a pending student saved in this browser
+      const pendingRaw = localStorage.getItem('khemiai_pending_student');
+      if (pendingRaw) {
+        try {
+          const parsedPending = JSON.parse(pendingRaw);
+          setPendingStudent(parsedPending);
+          // Check silently if approved in the background
+          checkPendingApprovalStatus(parsedPending, false);
+        } catch (e) {
+          localStorage.removeItem('khemiai_pending_student');
+        }
+      }
       setLoading(false);
     }
   }, []);
@@ -854,6 +929,26 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_lig
         return;
       }
 
+      // Check if student is pending approval
+      if (data.status === 'pending' || data.is_approved === false) {
+        const pendingData = {
+          id: matchedDoc.id,
+          name: data.name,
+          code: finalCleanCode,
+          phone: data.phone,
+          password: data.password,
+          className: data.class_name || data.className,
+          groupName: data.group_name || data.groupName,
+          status: 'pending',
+          registeredAt: data.createdAt || new Date().toISOString()
+        };
+        localStorage.setItem('khemiai_pending_student', JSON.stringify(pendingData));
+        setPendingStudent(pendingData);
+        setLoginError('⏳ عذراً يا بطل! حسابك لا يزال قيد المراجعة والاعتماد من قِبل إدارة الأستاذ الخيميائي ولم يتم تفعيله بعد. يرجى الانتظار حتى يعتمد الأدمن حسابك.');
+        setIsSubmittingLogin(false);
+        return;
+      }
+
       // Success Login
       const savedData = { 
         id: matchedDoc.id, 
@@ -882,6 +977,14 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_lig
     e.preventDefault();
     setLoginError('');
     setIsSubmittingLogin(true);
+
+    // Prevent re-registration if already pending on this browser
+    const existingPending = localStorage.getItem('khemiai_pending_student');
+    if (existingPending || pendingStudent) {
+      setLoginError('⚠️ عذراً يا بطل! لقد قمت بالتسجيل مسبقاً بهذا المتصفح ولديك طلب قيد المراجعة حالياً. لا يُسمح بتسجيل حساب جديد حتى يتم اعتماد أو فحص طلبك الحالي.');
+      setIsSubmittingLogin(false);
+      return;
+    }
 
     const { name, phone, className, groupName, password } = loginForm;
     if (!name || !phone || !className || !groupName || !password) {
@@ -930,13 +1033,14 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_lig
         total_score: 0,
         badges: ['Iron Recruit'],
         avatar: 'spiderman', // default avatar
+        status: 'pending',
+        is_approved: false,
         createdAt: new Date().toISOString()
       };
 
       const docRef = await addDoc(collection(db, 'students'), newStudentDoc);
 
-      // Show the congratulatory popup modal with their newly generated credentials
-      setNewlyRegisteredStudent({
+      const pendingObj = {
         id: docRef.id,
         name: newStudentDoc.name,
         code: newStudentDoc.code,
@@ -946,8 +1050,17 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_lig
         groupName: newStudentDoc.group_name,
         totalScore: 0,
         badges: ['Iron Recruit'],
-        avatar: 'spiderman'
-      });
+        avatar: 'spiderman',
+        status: 'pending',
+        registeredAt: newStudentDoc.createdAt
+      };
+
+      // Persist in browser so user cannot register again and requests remain pending
+      localStorage.setItem('khemiai_pending_student', JSON.stringify(pendingObj));
+      setPendingStudent(pendingObj);
+
+      // Show the identity card popup modal with their newly generated credentials
+      setNewlyRegisteredStudent(pendingObj);
 
     } catch (err: any) {
       setLoginError('فشل تسجيل البطل: ' + err.message);
@@ -1290,35 +1403,134 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_lig
           </div>
 
 
-          {/* Login vs Register Tabs Selector */}
-          <div className="grid grid-cols-2 gap-2 bg-stone-900 border border-stone-800 p-1 rounded-xl mb-6">
-            <button
-              onClick={() => {
-                setAuthMode('login');
-                setLoginError('');
-              }}
-              className={`py-3 rounded-lg text-sm font-black transition ${
-                authMode === 'login'
-                  ? 'bg-cyan-500 text-slate-950 shadow-md font-bold'
-                  : 'text-stone-400 hover:text-stone-200 hover:bg-white/5'
-              }`}
-            >
-              تسجيل الدخول
-            </button>
-            <button
-              onClick={() => {
-                setAuthMode('register');
-                setLoginError('');
-              }}
-              className={`py-3 rounded-lg text-sm font-black transition ${
-                authMode === 'register'
-                  ? 'bg-cyan-500 text-slate-950 shadow-md font-bold'
-                  : 'text-stone-400 hover:text-stone-200 hover:bg-white/5'
-              }`}
-            >
-              تسجيل طالب جديد
-            </button>
-          </div>
+          {pendingStudent ? (
+            /* PENDING APPROVAL SCREEN */
+            <div className="space-y-5 text-right">
+              <div className="bg-amber-500/10 border-2 border-amber-500/30 rounded-2xl p-5 text-center space-y-3">
+                <div className="w-16 h-16 bg-amber-500/20 text-amber-400 rounded-full flex items-center justify-center mx-auto animate-pulse">
+                  <Clock className="w-8 h-8" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-black text-white">
+                    طلبك قيد المراجعة والاعتماد ⏳
+                  </h3>
+                  <p className="text-xs font-bold text-stone-300 mt-1 leading-relaxed">
+                    أهلاً بك يا <span className="text-cyan-400 font-black">{pendingStudent.name}</span>! لقد قمت بالتسجيل مسبقاً بهذا المتصفح وتم حفظ طلبك، والموقع لا يسمح بتسجيل حساب آخر.
+                  </p>
+                  <p className="text-xs font-bold text-amber-300 mt-1">
+                    حسابك في انتظار موافقة واعتماد مستر الخيميائي لتتمكن من الدخول للمنصة.
+                  </p>
+                </div>
+              </div>
+
+              {/* Stored Credentials Card */}
+              <div className="bg-[#fdf6e3] text-stone-900 p-5 rounded-2xl border border-amber-900/20 shadow-inner text-right space-y-3">
+                <div className="border-b border-stone-900/10 pb-2 flex items-center justify-between">
+                  <span className="text-xs font-black text-amber-900">كارت بيانات الطالب المسجل</span>
+                  <span className="text-[10px] font-black bg-amber-600 text-white px-2 py-0.5 rounded-full">قيد المراجعة ⏳</span>
+                </div>
+                <div className="text-base font-black text-stone-900">{pendingStudent.name}</div>
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div className="bg-white/70 p-2.5 rounded-xl border border-stone-900/10">
+                    <span className="text-[10px] font-black text-stone-500 block">كود الطالب:</span>
+                    <span className="text-lg font-mono font-black text-amber-700">{pendingStudent.code}</span>
+                  </div>
+                  <div className="bg-white/70 p-2.5 rounded-xl border border-stone-900/10">
+                    <span className="text-[10px] font-black text-stone-500 block">كلمة المرور:</span>
+                    <span className="text-lg font-mono font-black text-stone-900">{pendingStudent.password}</span>
+                  </div>
+                </div>
+                <div className="text-xs font-bold text-stone-600 pt-1">
+                  المرحلة: {pendingStudent.className || pendingStudent.class_name} • المجموعة: {pendingStudent.groupName || pendingStudent.group_name}
+                </div>
+              </div>
+
+              {approvalStatusMessage && (
+                <div className="p-3 bg-amber-950/60 border border-amber-600 text-amber-200 font-bold text-xs text-center rounded-xl">
+                  {approvalStatusMessage}
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="space-y-3 pt-2">
+                <button
+                  type="button"
+                  disabled={isCheckingApproval}
+                  onClick={() => checkPendingApprovalStatus(pendingStudent, true)}
+                  className="w-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black py-4 rounded-xl shadow-lg transition text-base flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {isCheckingApproval ? (
+                    <>
+                      <span className="w-5 h-5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"></span>
+                      <span>جاري التحقق من موافقة المستر...</span>
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="w-5 h-5" />
+                      <span>فحص وتحديث حالة القبول الآن 🔄</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`الاسم: ${pendingStudent.name}\nكود الدخول: ${pendingStudent.code}\nكلمة المرور: ${pendingStudent.password}\nالصف: ${pendingStudent.className || pendingStudent.class_name}\nالمجموعة: ${pendingStudent.groupName || pendingStudent.group_name}`);
+                    alert("تم نسخ بيانات الكارت بنجاح!");
+                  }}
+                  className="w-full bg-stone-900 hover:bg-stone-800 text-stone-200 font-black py-3 rounded-xl border border-stone-800 transition text-xs flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span>نسخ كارت البيانات 📋</span>
+                </button>
+
+                <div className="pt-3 text-center border-t border-stone-800">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm("هل تريد تسجيل الدخول بحساب آخر مفعل؟ سيتم إلغاء شاشة الانتظار الحالية.")) {
+                        localStorage.removeItem('khemiai_pending_student');
+                        setPendingStudent(null);
+                        setAuthMode('login');
+                      }
+                    }}
+                    className="text-xs font-bold text-stone-400 hover:text-cyan-400 underline transition cursor-pointer"
+                  >
+                    هل لديك حساب مفعل وتريد الدخول به؟ اضغط هنا
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Login vs Register Tabs Selector */}
+              <div className="grid grid-cols-2 gap-2 bg-stone-900 border border-stone-800 p-1 rounded-xl mb-6">
+                <button
+                  onClick={() => {
+                    setAuthMode('login');
+                    setLoginError('');
+                  }}
+                  className={`py-3 rounded-lg text-sm font-black transition ${
+                    authMode === 'login'
+                      ? 'bg-cyan-500 text-slate-950 shadow-md font-bold'
+                      : 'text-stone-400 hover:text-stone-200 hover:bg-white/5'
+                  }`}
+                >
+                  تسجيل الدخول
+                </button>
+                <button
+                  onClick={() => {
+                    setAuthMode('register');
+                    setLoginError('');
+                  }}
+                  className={`py-3 rounded-lg text-sm font-black transition ${
+                    authMode === 'register'
+                      ? 'bg-cyan-500 text-slate-950 shadow-md font-bold'
+                      : 'text-stone-400 hover:text-stone-200 hover:bg-white/5'
+                  }`}
+                >
+                  تسجيل طالب جديد
+                </button>
+              </div>
 
           {loginError && (
             <div className="bg-rose-950/50 border-2 border-rose-600 text-rose-300 p-4 rounded-xl text-center font-bold text-sm mb-6">
@@ -1544,6 +1756,8 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_lig
               </button>
             </form>
           )}
+        </>
+      )}
 
         </div>
 
@@ -1635,33 +1849,55 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_lig
                   </div>
                 </div>
 
-                <div className="bg-amber-950/40 border border-amber-900/60 p-4 rounded-xl mb-6 text-amber-300 text-xs font-bold leading-relaxed text-right">
-                  ⚠️ **تنبيه هام جداً:** احفظ كلمة المرور الخاصة بك في مكان آمن أو التقط لقطة شاشة (Screenshot). كلمة المرور هي وسيلتك الحصرية لتسجيل الدخول إلى حسابك في أي وقت!
+                <div className="bg-amber-500/10 border-2 border-amber-500/40 p-4 rounded-xl mb-6 text-amber-300 text-xs font-bold leading-relaxed text-right space-y-1.5">
+                  <div className="flex items-center gap-2 font-black text-sm text-amber-400">
+                    <Clock className="w-4 h-4 shrink-0" />
+                    <span>طلبك قيد المراجعة والاعتماد من الإدارة ⏳</span>
+                  </div>
+                  <p className="text-stone-300">
+                    تم إنشاء كارت بياناتك بنجاح! حسابك حالياً قيد المراجعة والموافقة من قِبل إدارة الأستاذ الخيميائي. لن تتمكن من الدخول للمنصة حتى يعتمد الأدمن حسابك.
+                  </p>
+                  <p className="text-[11px] text-stone-400">
+                    💡 تم حفظ طلبك على هذا المتصفح لمنع التسجيل المكرر. يمكنك فحص حالة القبول في أي وقت بالضغط على الزر أدناه.
+                  </p>
                 </div>
 
-                <div className="flex gap-4">
+                <div className="flex flex-col sm:flex-row gap-3">
                   <button
                     onClick={() => {
-                      navigator.clipboard.writeText(`الاسم: ${newlyRegisteredStudent.name}\nكود الدخول: ${newlyRegisteredStudent.code}\nكلمة المرور: ${newlyRegisteredStudent.password}`);
+                      navigator.clipboard.writeText(`الاسم: ${newlyRegisteredStudent.name}\nكود الدخول: ${newlyRegisteredStudent.code}\nكلمة المرور: ${newlyRegisteredStudent.password}\nالصف: ${newlyRegisteredStudent.className}\nالمجموعة: ${newlyRegisteredStudent.groupName}`);
                       alert("تم نسخ بيانات الدخول بنجاح لحافظتك!");
                     }}
-                    className="flex-1 bg-stone-800 hover:bg-stone-700 border border-stone-700 text-stone-100 font-black py-3 rounded-xl transition text-sm"
+                    className="flex-1 bg-stone-800 hover:bg-stone-700 border border-stone-700 text-stone-100 font-black py-3 rounded-xl transition text-sm flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    نسخ البيانات 📋
+                    <span>نسخ البيانات 📋</span>
                   </button>
+
                   <button
-                    onClick={() => {
-                      // Login immediately
-                      localStorage.setItem('jamal_student', JSON.stringify(newlyRegisteredStudent));
-                      setStudent(newlyRegisteredStudent);
-                      setSelectedAvatar('spiderman');
-                      setNewlyRegisteredStudent(null);
-                      setAuthMode('login');
-                      fetchStudentData(newlyRegisteredStudent.code, newlyRegisteredStudent.className);
-                    }}
-                    className="flex-1 bg-amber-600 hover:bg-amber-500 text-stone-950 font-black py-3 rounded-xl shadow-md transition text-sm"
+                    disabled={isCheckingApproval}
+                    onClick={() => checkPendingApprovalStatus(newlyRegisteredStudent, true)}
+                    className="flex-1 bg-cyan-600 hover:bg-cyan-500 text-white font-black py-3 rounded-xl shadow-md transition text-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                   >
-                    الدخول للمنصة 📜
+                    {isCheckingApproval ? (
+                      <>
+                        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                        <span>جاري التحقق...</span>
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="w-4 h-4" />
+                        <span>فحص حالة الاعتماد الآن 🔄</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                <div className="mt-3 text-center">
+                  <button
+                    onClick={() => setNewlyRegisteredStudent(null)}
+                    className="text-xs font-bold text-stone-400 hover:text-stone-200 transition underline cursor-pointer"
+                  >
+                    إغلاق والانتظار في شاشة المراجعة ⏳
                   </button>
                 </div>
               </div>

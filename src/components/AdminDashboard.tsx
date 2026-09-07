@@ -61,10 +61,16 @@ import {
   Ban,
   UserX,
   Send,
-  ShieldAlert
+  ShieldAlert,
+  UserPlus,
+  Bot,
+  UserCheck,
+  UserMinus
 } from 'lucide-react';
 import AlchemiyaStudentDashboard from './AlchemiyaStudentDashboard';
 import AdminCenterEvaluations from './AdminCenterEvaluations';
+import AdminAddStudentModal from './AdminAddStudentModal';
+import AdminDuplicateDetector from './AdminDuplicateDetector';
 
 const SECRET_KEY = "JamalAcademy_Secret_2026";
 
@@ -206,6 +212,12 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   // Scanner State
   const [scanResult, setScanResult] = useState<any>(null);
+
+  // Student Approval & Management States
+  const [studentViewSubTab, setStudentViewSubTab] = useState<'approved' | 'pending'>('approved');
+  const [isAddStudentModalOpen, setIsAddStudentModalOpen] = useState(false);
+  const [isDuplicateDetectorOpen, setIsDuplicateDetectorOpen] = useState(false);
+  const [isApprovingAll, setIsApprovingAll] = useState(false);
 
   // Edit States
   const [editingStudent, setEditingStudent] = useState<string | null>(null);
@@ -1054,8 +1066,57 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     setRankings(sorted);
   };
 
+  // Split into approved and pending students
+  const pendingStudents = students.filter(s => s.status === 'pending' || s.is_approved === false);
+  const approvedStudents = students.filter(s => s.status !== 'pending' && s.is_approved !== false);
+
+  // Approval Action Handlers
+  const handleApproveStudent = async (studentId: string) => {
+    try {
+      await updateDoc(doc(db, 'students', studentId), {
+        status: 'approved',
+        is_approved: true
+      });
+      setStudents(prev => prev.map(s => s.id === studentId ? { ...s, status: 'approved', is_approved: true } : s));
+    } catch (err: any) {
+      alert('خطأ أثناء اعتماد الطالب: ' + err.message);
+    }
+  };
+
+  const handleRejectStudent = async (studentId: string, studentName: string) => {
+    if (!window.confirm(`هل أنت متأكد من رفض وحذف طلب الطالب "${studentName}"؟`)) return;
+    try {
+      await deleteDoc(doc(db, 'students', studentId));
+      setStudents(prev => prev.filter(s => s.id !== studentId));
+    } catch (err: any) {
+      alert('خطأ أثناء حذف الطلب: ' + err.message);
+    }
+  };
+
+  const handleApproveAllPending = async () => {
+    if (pendingStudents.length === 0) return;
+    if (!window.confirm(`هل أنت متأكد من قبول واعتماد جميع طلبات التسجيل المعلقة (${pendingStudents.length} طالب)؟`)) return;
+
+    setIsApprovingAll(true);
+    try {
+      const batch = writeBatch(db);
+      pendingStudents.forEach(st => {
+        const ref = doc(db, 'students', st.id);
+        batch.update(ref, { status: 'approved', is_approved: true });
+      });
+      await batch.commit();
+
+      setStudents(prev => prev.map(s => (s.status === 'pending' || s.is_approved === false) ? { ...s, status: 'approved', is_approved: true } : s));
+      alert(`تم اعتماد وتفعيل ${pendingStudents.length} طالب بنجاح! 🎉`);
+    } catch (err: any) {
+      alert('حدث خطأ أثناء اعتماد الطلبات: ' + err.message);
+    } finally {
+      setIsApprovingAll(false);
+    }
+  };
+
   // Custom filters for students and past score archives
-  const filteredStudents = students.filter(s => {
+  const filteredStudents = (studentViewSubTab === 'pending' ? pendingStudents : approvedStudents).filter(s => {
     const sName = (s.name || '').toLowerCase();
     const sCode = (s.code || '').toLowerCase();
     const sPhone = (s.phone || '').toLowerCase();
@@ -1170,7 +1231,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
             { id: 'alchemiya', label: 'تقييم طلاب السنتر', icon: GraduationCap },
             { id: 'banner', label: 'تعديل بنر الهوم', icon: ImageIcon },
             { id: 'scanner', label: 'مسح النتائج (QR)', icon: QrCode },
-            { id: 'students', label: 'الطلاب المسجلين', icon: Users },
+            { id: 'students', label: 'الطلاب المسجلين', icon: Users, badge: pendingStudents.length },
             { id: 'quizzes', label: 'بنك الامتحانات', icon: FileSignature },
             { id: 'videos', label: 'إدارة الفيديوهات', icon: Video },
             { id: 'results', label: 'سجلات الدرجات', icon: Database },
@@ -1185,14 +1246,21 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   setActiveTab(tab.id as any);
                   setSelectedQuiz(null); // Clear selected quiz detail state on navigation
                 }}
-                className={`w-full flex items-center gap-3 py-4 px-4 rounded-xl text-sm font-black transition ${
+                className={`w-full flex items-center justify-between py-4 px-4 rounded-xl text-sm font-black transition ${
                   activeTab === tab.id
                     ? 'bg-amber-600 text-stone-100 shadow-lg'
                     : 'text-gray-400 hover:text-stone-100 hover:bg-white/5'
                 }`}
               >
-                <Icon className="w-5 h-5" />
-                {tab.label}
+                <div className="flex items-center gap-3">
+                  <Icon className="w-5 h-5" />
+                  <span>{tab.label}</span>
+                </div>
+                {tab.badge && tab.badge > 0 ? (
+                  <span className="bg-amber-500 text-slate-950 font-black text-[11px] px-2 py-0.5 rounded-full animate-pulse">
+                    {tab.badge} جديد
+                  </span>
+                ) : null}
               </button>
             );
           })}
@@ -1209,7 +1277,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
             { id: 'alchemiya', label: 'الخيميائي', icon: GraduationCap },
             { id: 'banner', label: 'البنر', icon: ImageIcon },
             { id: 'scanner', label: 'مسح النتائج (QR)', icon: QrCode },
-            { id: 'students', label: 'الطلاب', icon: Users },
+            { id: 'students', label: 'الطلاب', icon: Users, badge: pendingStudents.length },
             { id: 'quizzes', label: 'الامتحانات', icon: FileSignature },
             { id: 'videos', label: 'الفيديوهات', icon: Video },
             { id: 'results', label: 'الدرجات', icon: Database },
@@ -1224,13 +1292,20 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   setActiveTab(tab.id as any);
                   setSelectedQuiz(null);
                 }}
-                className={`flex flex-col items-center justify-center py-2 px-3 space-y-1 transition rounded-xl ${
+                className={`relative flex flex-col items-center justify-center py-2 px-3 space-y-1 transition rounded-xl ${
                   activeTab === tab.id
                     ? 'text-amber-500 bg-red-950/20'
                     : 'text-gray-500 hover:text-gray-300'
                 }`}
               >
-                <Icon className="w-5 h-5" />
+                <div className="relative">
+                  <Icon className="w-5 h-5" />
+                  {tab.badge && tab.badge > 0 ? (
+                    <span className="absolute -top-1.5 -right-2 bg-amber-500 text-slate-950 font-black text-[9px] w-4 h-4 rounded-full flex items-center justify-center animate-pulse">
+                      {tab.badge}
+                    </span>
+                  ) : null}
+                </div>
                 <span className="text-[10px] font-black">{tab.label}</span>
               </button>
             );
@@ -1714,212 +1789,450 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
           {activeTab === 'students' && (
             <div className="space-y-6">
-              
-              {/* Search and filter UI */}
-              <div className="bg-stone-950/60 border border-gray-800 p-6 rounded-2xl grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="relative">
-                  <input
-                    type="text"
-                    className="w-full bg-white/5 border-2 border-gray-800 focus:border-amber-500 text-stone-100 font-bold p-3 rounded-xl outline-none transition text-right"
-                    placeholder="ابحث بالاسم، الكود، أو الهاتف..."
-                    value={searchStudent}
-                    onChange={e => setSearchStudent(e.target.value)}
-                  />
-                  <Search className="absolute left-4 top-3.5 text-gray-500 w-5 h-5" />
+
+              {/* Students Management Header Toolbar */}
+              <div className="bg-stone-950/80 border border-gray-800 rounded-3xl p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xl">
+                <div className="space-y-1 text-right">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/30 text-amber-400 font-extrabold text-xs px-3 py-1 rounded-full">
+                      <Users className="w-3.5 h-3.5" /> شؤون الطلاب وقاعدة البيانات
+                    </span>
+                    {pendingStudents.length > 0 && (
+                      <span className="inline-flex items-center gap-1 bg-amber-500 text-slate-950 font-black text-xs px-3 py-0.5 rounded-full animate-pulse">
+                        <Clock className="w-3 h-3" /> {pendingStudents.length} طلب قيد المراجعة
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="text-2xl font-black text-stone-100">إدارة حسابات واعتمادات الطلاب</h3>
+                  <p className="text-xs text-stone-400 font-bold">
+                    إجمالي المسجلين: {students.length} طالب • المعتمدين: {approvedStudents.length} • المعلقين: {pendingStudents.length}
+                  </p>
                 </div>
 
-                <select
-                  className="bg-stone-950 border-2 border-gray-800 focus:border-amber-500 text-stone-100 rounded-xl p-3 font-bold outline-none cursor-pointer"
-                  value={filterClass}
-                  onChange={e => setFilterClass(e.target.value)}
-                >
-                  <option value="all">كل الصفوف الدراسية</option>
-                  <option value="الصف الأول الابتدائي">الصف الأول الابتدائي</option>
-                  <option value="الصف الثاني الابتدائي">الصف الثاني الابتدائي</option>
-                  <option value="الصف الثالث الابتدائي">الصف الثالث الابتدائي</option>
-                  <option value="الصف الرابع الابتدائي">الصف الرابع الابتدائي</option>
-                  <option value="الصف الخامس الابتدائي">الصف الخامس الابتدائي</option>
-                  <option value="الصف السادس الابتدائي">الصف السادس الابتدائي</option>
-                  <option value="الصف الأول الإعدادي">الصف الأول الإعدادي</option>
-                  <option value="الصف الثاني الإعدادي">الصف الثاني الإعدادي</option>
-                  <option value="الصف الثالث الإعدادي">الصف الثالث الإعدادي</option>
-                  <option value="الصف الأول الثانوي">الصف الأول الثانوي</option>
-                  <option value="الصف الثاني الثانوي">الصف الثاني الثانوي</option>
-                  <option value="الصف الثالث الثانوي">الصف الثالث الثانوي</option>
-                </select>
+                <div className="flex items-center gap-3 w-full md:w-auto flex-wrap">
+                  <button
+                    onClick={() => setIsDuplicateDetectorOpen(true)}
+                    className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black px-4 py-3 rounded-2xl shadow-lg transition text-xs sm:text-sm cursor-pointer"
+                  >
+                    <Bot className="w-4 h-4" />
+                    <span>كشف التكرارات بالذكاء الاصطناعي 🤖</span>
+                  </button>
 
-                <select
-                  className="bg-stone-950 border-2 border-gray-800 focus:border-amber-500 text-stone-100 rounded-xl p-3 font-bold outline-none cursor-pointer"
-                  value={filterGroup}
-                  onChange={e => setFilterGroup(e.target.value)}
-                >
-                  <option value="all">كل المجموعات (الأيام)</option>
-                  {centerGroups.map(g => (
-                    <option key={g.id} value={g.group_name}>
-                      {g.group_name} ({g.class_name})
-                    </option>
-                  ))}
-                  <option value="السبت">السبت</option>
-                  <option value="الأحد">الأحد</option>
-                  <option value="الإثنين">الإثنين</option>
-                  <option value="الثلاثاء">الثلاثاء</option>
-                  <option value="الأربعاء">الأربعاء</option>
-                  <option value="الخميس">الخميس</option>
-                  <option value="الجمعة">الجمعة</option>
-                </select>
+                  <button
+                    onClick={() => setIsAddStudentModalOpen(true)}
+                    className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-500 text-stone-950 font-black px-4 py-3 rounded-2xl shadow-lg transition text-xs sm:text-sm cursor-pointer"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    <span>إضافة طالب يدوياً ➕</span>
+                  </button>
+                </div>
               </div>
 
-              {/* Students directory list */}
-              <div className="bg-stone-950/60 border border-gray-800 rounded-2xl overflow-x-auto">
-                <table className="w-full text-right border-collapse">
-                  <thead>
-                    <tr className="border-b border-gray-800 bg-gray-950 text-gray-400 font-bold text-sm">
-                      <th className="p-4">كود الطالب</th>
-                      <th className="p-4">اسم الطالب</th>
-                      <th className="p-4">كلمة المرور</th>
-                      <th className="p-4">رقم الهاتف</th>
-                      <th className="p-4">الصف</th>
-                      <th className="p-4">المجموعة</th>
-                      <th className="p-4 text-center">إجراءات</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredStudents.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="p-8 text-center text-gray-500 font-bold text-sm">
-                          لا يوجد طلاب مسجلين يطابقون خيارات البحث الحالية.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredStudents.map((s, idx) => (
-                        <tr key={s.id || idx} className="border-b border-gray-900 hover:bg-white/5 transition font-bold text-sm">
-                          <td className="p-4 font-mono text-amber-500">{s.code}</td>
-                          {editingStudent === s.id ? (
-                            <>
-                              <td className="p-4"><input className="w-full bg-gray-900 border border-gray-700 text-stone-100 px-2 py-1 rounded" value={editStudentData.name} onChange={(e) => setEditStudentData({...editStudentData, name: e.target.value})} /></td>
-                              <td className="p-4"><input className="w-full bg-gray-900 border border-gray-700 text-stone-100 px-2 py-1 rounded" value={editStudentData.password || ''} onChange={(e) => setEditStudentData({...editStudentData, password: e.target.value})} /></td>
-                              <td className="p-4"><input className="w-full bg-gray-900 border border-gray-700 text-stone-100 px-2 py-1 rounded" value={editStudentData.phone} onChange={(e) => setEditStudentData({...editStudentData, phone: e.target.value})} /></td>
-                              <td className="p-4">
-                                <select className="w-full bg-gray-900 border border-gray-700 text-stone-100 px-2 py-1 rounded" value={editStudentData.class_name} onChange={(e) => setEditStudentData({...editStudentData, class_name: e.target.value})}>
-                                  <option value="الصف الأول الابتدائي">الأول الابتدائي</option>
-                                  <option value="الصف الثاني الابتدائي">الثاني الابتدائي</option>
-                                  <option value="الصف الثالث الابتدائي">الثالث الابتدائي</option>
-                                  <option value="الصف الرابع الابتدائي">الرابع الابتدائي</option>
-                                  <option value="الصف الخامس الابتدائي">الخامس الابتدائي</option>
-                                  <option value="الصف السادس الابتدائي">السادس الابتدائي</option>
-                                  <option value="الصف الأول الإعدادي">الأول الإعدادي</option>
-                                  <option value="الصف الثاني الإعدادي">الثاني الإعدادي</option>
-                                  <option value="الصف الثالث الإعدادي">الثالث الإعدادي</option>
-                                  <option value="الصف الأول الثانوي">الأول الثانوي</option>
-                                  <option value="الصف الثاني الثانوي">الثاني الثانوي</option>
-                                  <option value="الصف الثالث الثانوي">الثالث الثانوي</option>
-                                </select>
-                              </td>
-                              <td className="p-4">
-                                <div className="space-y-1.5 min-w-[160px]">
-                                  <select
-                                    className="w-full bg-gray-900 border border-gray-700 text-stone-100 px-2 py-1.5 rounded text-xs font-bold"
-                                    value={editStudentData.group_name || editStudentData.groupName || ''}
-                                    onChange={(e) => setEditStudentData({
-                                      ...editStudentData,
-                                      group_name: e.target.value,
-                                      groupName: e.target.value
-                                    })}
-                                  >
-                                    <option value="" disabled>اختر المجموعة...</option>
-                                    {centerGroups
-                                      .filter(g => !editStudentData.class_name || g.class_name === editStudentData.class_name)
-                                      .map(g => (
-                                        <option key={g.id} value={g.group_name}>
-                                          {g.group_name} ({g.day_of_week})
-                                        </option>
-                                      ))}
-                                    {centerGroups.length === 0 && (
-                                      <>
-                                        <option value="مجموعة السبت والثلثاء">مجموعة السبت والثلثاء</option>
-                                        <option value="مجموعة الأحد والأربعاء">مجموعة الأحد والأربعاء</option>
-                                        <option value="مجموعة الإثنين والخميس">مجموعة الإثنين والخميس</option>
-                                        <option value="مجموعة الجمعة">مجموعة الجمعة</option>
-                                      </>
-                                    )}
-                                    {editStudentData.group_name && !centerGroups.some(g => g.group_name === editStudentData.group_name) && (
-                                      <option value={editStudentData.group_name}>{editStudentData.group_name}</option>
-                                    )}
-                                  </select>
-                                  <input
-                                    type="text"
-                                    placeholder="أو اكتب اسم مجموعة مخصص..."
-                                    value={editStudentData.group_name || ''}
-                                    onChange={(e) => setEditStudentData({
-                                      ...editStudentData,
-                                      group_name: e.target.value,
-                                      groupName: e.target.value
-                                    })}
-                                    className="w-full bg-stone-950 border border-stone-800 text-stone-300 px-2 py-1 rounded text-[11px] font-bold"
-                                  />
-                                </div>
-                              </td>
-                              <td className="p-4 text-center">
-                                <button onClick={() => handleSaveStudentEdit(s.id)} className="bg-green-600 hover:bg-green-500 text-stone-100 px-3 py-1 rounded text-xs ml-2">حفظ</button>
-                                <button onClick={() => setEditingStudent(null)} className="bg-gray-600 hover:bg-gray-500 text-stone-100 px-3 py-1 rounded text-xs">إلغاء</button>
-                              </td>
-                            </>
-                          ) : (
-                            <>
-                              <td className="p-4 text-stone-100 uppercase">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span>{s.name}</span>
-                                  {s.is_banned && (
-                                    <span className="bg-red-950/80 border border-red-700 text-red-300 text-[10px] px-2 py-0.5 rounded-md font-black animate-pulse">
-                                      محظور منصة 🛑
-                                    </span>
-                                  )}
-                                  {!s.is_banned && s.is_chat_banned && (
-                                    <span className="bg-amber-950/80 border border-amber-700 text-amber-300 text-[10px] px-2 py-0.5 rounded-md font-black">
-                                      محظور شات 🚫
-                                    </span>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="p-4 font-mono text-sky-400">{s.password || 'بلا كلمة مرور'}</td>
-                              <td className="p-4 text-gray-400 font-mono">{s.phone}</td>
-                              <td className="p-4 text-gray-300">{s.class_name}</td>
-                              <td className="p-4 text-gray-300">{s.group_name}</td>
-                              <td className="p-4 text-center">
-                                <div className="flex items-center justify-center gap-2 flex-wrap">
-                                  <button 
-                                    onClick={() => {
-                                      setEditingStudent(s.id);
-                                      setEditStudentData(s);
-                                    }} 
-                                    className="text-gray-400 hover:text-stone-100 transition text-xs font-bold"
-                                  >
-                                    تعديل
-                                  </button>
-                                  <button
-                                    onClick={() => setSelectedStudentForAction({
-                                      id: s.id,
-                                      code: s.code,
-                                      name: s.name,
-                                      className: s.class_name || s.className || '',
-                                      is_chat_banned: !!s.is_chat_banned,
-                                      is_banned: !!s.is_banned
-                                    })}
-                                    className="text-xs px-2.5 py-1 rounded-xl border border-amber-600/80 bg-amber-950/40 text-amber-300 hover:bg-amber-900/60 font-black transition flex items-center gap-1"
-                                  >
-                                    <Ban className="w-3 h-3" />
-                                    <span>إدارة الحظر</span>
-                                  </button>
-                                </div>
-                              </td>
-                            </>
-                          )}
-                        </tr>
-                      ))
+              {/* Sub-Tab Navigation */}
+              <div className="grid grid-cols-2 gap-2 bg-stone-950/60 border border-gray-800 p-1.5 rounded-2xl">
+                <button
+                  onClick={() => setStudentViewSubTab('approved')}
+                  className={`py-3 px-4 rounded-xl text-sm font-black transition flex items-center justify-center gap-2 cursor-pointer ${
+                    studentViewSubTab === 'approved'
+                      ? 'bg-amber-600 text-stone-950 shadow-md'
+                      : 'text-stone-400 hover:text-stone-200 hover:bg-white/5'
+                  }`}
+                >
+                  <UserCheck className="w-4 h-4" />
+                  <span>الطلاب المعتمدون ({approvedStudents.length})</span>
+                </button>
+
+                <button
+                  onClick={() => setStudentViewSubTab('pending')}
+                  className={`py-3 px-4 rounded-xl text-sm font-black transition flex items-center justify-center gap-2 cursor-pointer ${
+                    studentViewSubTab === 'pending'
+                      ? 'bg-amber-600 text-stone-950 shadow-md'
+                      : 'text-stone-400 hover:text-stone-200 hover:bg-white/5'
+                  }`}
+                >
+                  <Clock className="w-4 h-4" />
+                  <span>طلبات التسجيل قيد المراجعة</span>
+                  {pendingStudents.length > 0 && (
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-black ${
+                      studentViewSubTab === 'pending'
+                        ? 'bg-slate-950 text-amber-400'
+                        : 'bg-amber-500 text-slate-950 animate-pulse'
+                    }`}>
+                      {pendingStudents.length}
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {/* PENDING APPROVAL VIEW */}
+              {studentViewSubTab === 'pending' && (
+                <div className="space-y-4">
+                  <div className="bg-amber-500/10 border-2 border-amber-500/30 rounded-2xl p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-right">
+                    <div className="space-y-1">
+                      <h4 className="text-lg font-black text-amber-300 flex items-center gap-2">
+                        <Clock className="w-5 h-5" />
+                        <span>طلبات تسجيل جديدة تنتظر الاعتماد والقبول ({pendingStudents.length})</span>
+                      </h4>
+                      <p className="text-xs text-stone-300 font-bold leading-relaxed">
+                        هؤلاء الطلاب قاموا بالتسجيل على المنصة، ولكن لا يمكنهم الدخول إلا بعد مراجعتك واعتمادك لبياناتهم.
+                      </p>
+                    </div>
+
+                    {pendingStudents.length > 0 && (
+                      <button
+                        disabled={isApprovingAll}
+                        onClick={handleApproveAllPending}
+                        className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-black px-5 py-2.5 rounded-xl shadow-md transition text-xs sm:text-sm flex items-center gap-2 shrink-0 cursor-pointer"
+                      >
+                        {isApprovingAll ? (
+                          <>
+                            <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                            <span>جاري الاعتماد...</span>
+                          </>
+                        ) : (
+                          <>
+                            <UserCheck className="w-4 h-4" />
+                            <span>الموافقة على جميع الطلبات المعلقة ({pendingStudents.length})</span>
+                          </>
+                        )}
+                      </button>
                     )}
-                  </tbody>
-                </table>
-              </div>
+                  </div>
+
+                  {/* Search for Pending */}
+                  <div className="bg-stone-950/60 border border-gray-800 p-4 rounded-2xl">
+                    <div className="relative">
+                      <input
+                        type="text"
+                        className="w-full bg-white/5 border-2 border-gray-800 focus:border-amber-500 text-stone-100 font-bold p-3 rounded-xl outline-none transition text-right text-sm"
+                        placeholder="ابحث في طلبات المراجعة بالاسم، الكود، أو الهاتف..."
+                        value={searchStudent}
+                        onChange={e => setSearchStudent(e.target.value)}
+                      />
+                      <Search className="absolute left-4 top-3.5 text-gray-500 w-5 h-5" />
+                    </div>
+                  </div>
+
+                  {/* Pending Table */}
+                  <div className="bg-stone-950/60 border border-gray-800 rounded-2xl overflow-x-auto">
+                    <table className="w-full text-right border-collapse">
+                      <thead>
+                        <tr className="border-b border-gray-800 bg-gray-950 text-gray-400 font-bold text-xs sm:text-sm">
+                          <th className="p-4">كود الطالب</th>
+                          <th className="p-4">اسم الطالب</th>
+                          <th className="p-4">كلمة المرور</th>
+                          <th className="p-4">رقم الهاتف</th>
+                          <th className="p-4">الصف</th>
+                          <th className="p-4">المجموعة</th>
+                          <th className="p-4 text-center">إجراءات الاعتماد</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredStudents.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="p-12 text-center text-stone-400 font-bold text-sm">
+                              <div className="w-12 h-12 bg-amber-500/10 text-amber-400 rounded-full flex items-center justify-center mx-auto mb-3">
+                                <Check className="w-6 h-6" />
+                              </div>
+                              <p className="text-base font-black text-stone-200">لا توجد طلبات تسجيل معلقة حالياً!</p>
+                              <p className="text-xs text-stone-500 mt-1">جميع الطلاب المسجلين تم اعتمادهم بنجاح.</p>
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredStudents.map((s, idx) => {
+                            const cleanPhone = (s.phone || '').replace(/\D/g, '');
+                            return (
+                              <tr key={s.id || idx} className="border-b border-gray-900 hover:bg-white/5 transition font-bold text-sm">
+                                <td className="p-4 font-mono text-amber-500">{s.code}</td>
+                                <td className="p-4 text-stone-100 font-black">
+                                  <div className="flex items-center gap-2">
+                                    <span>{s.name}</span>
+                                    <span className="bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] px-2 py-0.5 rounded-full font-black">
+                                      قيد المراجعة
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="p-4 font-mono text-sky-400">{s.password || '—'}</td>
+                                <td className="p-4 text-gray-400 font-mono">
+                                  <div className="flex items-center gap-2">
+                                    <span>{s.phone}</span>
+                                    {cleanPhone && (
+                                      <a
+                                        href={`https://wa.me/20${cleanPhone.startsWith('0') ? cleanPhone.substring(1) : cleanPhone}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-400 p-1.5 rounded-lg border border-emerald-700/50 transition"
+                                        title="تواصل واتساب مع الطالب أو ولي الأمر"
+                                      >
+                                        <MessageSquare className="w-3.5 h-3.5" />
+                                      </a>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="p-4 text-gray-300">{s.class_name || s.className}</td>
+                                <td className="p-4 text-gray-300">{s.group_name || s.groupName}</td>
+                                <td className="p-4 text-center">
+                                  <div className="flex items-center justify-center gap-2">
+                                    <button
+                                      onClick={() => handleApproveStudent(s.id)}
+                                      className="bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer shadow"
+                                      title="اعتماد وتفعيل حساب الطالب"
+                                    >
+                                      <UserCheck className="w-3.5 h-3.5" />
+                                      <span>قبول واعتماد</span>
+                                    </button>
+                                    <button
+                                      onClick={() => handleRejectStudent(s.id, s.name)}
+                                      className="bg-rose-950/60 hover:bg-rose-900 border border-rose-700 text-rose-300 px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1 cursor-pointer"
+                                      title="رفض وحذف الطلب"
+                                    >
+                                      <UserMinus className="w-3.5 h-3.5" />
+                                      <span>رفض</span>
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* APPROVED STUDENTS VIEW */}
+              {studentViewSubTab === 'approved' && (
+                <>
+                  {/* Search and filter UI */}
+                  <div className="bg-stone-950/60 border border-gray-800 p-6 rounded-2xl grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="relative">
+                      <input
+                        type="text"
+                        className="w-full bg-white/5 border-2 border-gray-800 focus:border-amber-500 text-stone-100 font-bold p-3 rounded-xl outline-none transition text-right"
+                        placeholder="ابحث بالاسم، الكود، أو الهاتف..."
+                        value={searchStudent}
+                        onChange={e => setSearchStudent(e.target.value)}
+                      />
+                      <Search className="absolute left-4 top-3.5 text-gray-500 w-5 h-5" />
+                    </div>
+
+                    <select
+                      className="bg-stone-950 border-2 border-gray-800 focus:border-amber-500 text-stone-100 rounded-xl p-3 font-bold outline-none cursor-pointer"
+                      value={filterClass}
+                      onChange={e => setFilterClass(e.target.value)}
+                    >
+                      <option value="all">كل الصفوف الدراسية</option>
+                      <option value="الصف الأول الابتدائي">الصف الأول الابتدائي</option>
+                      <option value="الصف الثاني الابتدائي">الصف الثاني الابتدائي</option>
+                      <option value="الصف الثالث الابتدائي">الصف الثالث الابتدائي</option>
+                      <option value="الصف الرابع الابتدائي">الصف الرابع الابتدائي</option>
+                      <option value="الصف الخامس الابتدائي">الصف الخامس الابتدائي</option>
+                      <option value="الصف السادس الابتدائي">الصف السادس الابتدائي</option>
+                      <option value="الصف الأول الإعدادي">الصف الأول الإعدادي</option>
+                      <option value="الصف الثاني الإعدادي">الصف الثاني الإعدادي</option>
+                      <option value="الصف الثالث الإعدادي">الصف الثالث الإعدادي</option>
+                      <option value="الصف الأول الثانوي">الصف الأول الثانوي</option>
+                      <option value="الصف الثاني الثانوي">الصف الثاني الثانوي</option>
+                      <option value="الصف الثالث الثانوي">الصف الثالث الثانوي</option>
+                    </select>
+
+                    <select
+                      className="bg-stone-950 border-2 border-gray-800 focus:border-amber-500 text-stone-100 rounded-xl p-3 font-bold outline-none cursor-pointer"
+                      value={filterGroup}
+                      onChange={e => setFilterGroup(e.target.value)}
+                    >
+                      <option value="all">كل المجموعات (الأيام)</option>
+                      {centerGroups.map(g => (
+                        <option key={g.id} value={g.group_name}>
+                          {g.group_name} ({g.class_name})
+                        </option>
+                      ))}
+                      <option value="السبت">السبت</option>
+                      <option value="الأحد">الأحد</option>
+                      <option value="الإثنين">الإثنين</option>
+                      <option value="الثلاثاء">الثلاثاء</option>
+                      <option value="الأربعاء">الأربعاء</option>
+                      <option value="الخميس">الخميس</option>
+                      <option value="الجمعة">الجمعة</option>
+                    </select>
+                  </div>
+
+                  {/* Students directory list */}
+                  <div className="bg-stone-950/60 border border-gray-800 rounded-2xl overflow-x-auto">
+                    <table className="w-full text-right border-collapse">
+                      <thead>
+                        <tr className="border-b border-gray-800 bg-gray-950 text-gray-400 font-bold text-sm">
+                          <th className="p-4">كود الطالب</th>
+                          <th className="p-4">اسم الطالب</th>
+                          <th className="p-4">كلمة المرور</th>
+                          <th className="p-4">رقم الهاتف</th>
+                          <th className="p-4">الصف</th>
+                          <th className="p-4">المجموعة</th>
+                          <th className="p-4 text-center">إجراءات</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredStudents.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="p-8 text-center text-gray-500 font-bold text-sm">
+                              لا يوجد طلاب مسجلين يطابقون خيارات البحث الحالية.
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredStudents.map((s, idx) => (
+                            <tr key={s.id || idx} className="border-b border-gray-900 hover:bg-white/5 transition font-bold text-sm">
+                              <td className="p-4 font-mono text-amber-500">{s.code}</td>
+                              {editingStudent === s.id ? (
+                                <>
+                                  <td className="p-4"><input className="w-full bg-gray-900 border border-gray-700 text-stone-100 px-2 py-1 rounded" value={editStudentData.name} onChange={(e) => setEditStudentData({...editStudentData, name: e.target.value})} /></td>
+                                  <td className="p-4"><input className="w-full bg-gray-900 border border-gray-700 text-stone-100 px-2 py-1 rounded" value={editStudentData.password || ''} onChange={(e) => setEditStudentData({...editStudentData, password: e.target.value})} /></td>
+                                  <td className="p-4"><input className="w-full bg-gray-900 border border-gray-700 text-stone-100 px-2 py-1 rounded" value={editStudentData.phone} onChange={(e) => setEditStudentData({...editStudentData, phone: e.target.value})} /></td>
+                                  <td className="p-4">
+                                    <select className="w-full bg-gray-900 border border-gray-700 text-stone-100 px-2 py-1 rounded" value={editStudentData.class_name} onChange={(e) => setEditStudentData({...editStudentData, class_name: e.target.value})}>
+                                      <option value="الصف الأول الابتدائي">الأول الابتدائي</option>
+                                      <option value="الصف الثاني الابتدائي">الثاني الابتدائي</option>
+                                      <option value="الصف الثالث الابتدائي">الثالث الابتدائي</option>
+                                      <option value="الصف الرابع الابتدائي">الرابع الابتدائي</option>
+                                      <option value="الصف الخامس الابتدائي">الخامس الابتدائي</option>
+                                      <option value="الصف السادس الابتدائي">السادس الابتدائي</option>
+                                      <option value="الصف الأول الإعدادي">الأول الإعدادي</option>
+                                      <option value="الصف الثاني الإعدادي">الثاني الإعدادي</option>
+                                      <option value="الصف الثالث الإعدادي">الثالث الإعدادي</option>
+                                      <option value="الصف الأول الثانوي">الأول الثانوي</option>
+                                      <option value="الصف الثاني الثانوي">الثاني الثانوي</option>
+                                      <option value="الصف الثالث الثانوي">الثالث الثانوي</option>
+                                    </select>
+                                  </td>
+                                  <td className="p-4">
+                                    <div className="space-y-1.5 min-w-[160px]">
+                                      <select
+                                        className="w-full bg-gray-900 border border-gray-700 text-stone-100 px-2 py-1.5 rounded text-xs font-bold"
+                                        value={editStudentData.group_name || editStudentData.groupName || ''}
+                                        onChange={(e) => setEditStudentData({
+                                          ...editStudentData,
+                                          group_name: e.target.value,
+                                          groupName: e.target.value
+                                        })}
+                                      >
+                                        <option value="" disabled>اختر المجموعة...</option>
+                                        {centerGroups
+                                          .filter(g => !editStudentData.class_name || g.class_name === editStudentData.class_name)
+                                          .map(g => (
+                                            <option key={g.id} value={g.group_name}>
+                                              {g.group_name} ({g.day_of_week})
+                                            </option>
+                                          ))}
+                                        {centerGroups.length === 0 && (
+                                          <>
+                                            <option value="مجموعة السبت والثلثاء">مجموعة السبت والثلثاء</option>
+                                            <option value="مجموعة الأحد والأربعاء">مجموعة الأحد والأربعاء</option>
+                                            <option value="مجموعة الإثنين والخميس">مجموعة الإثنين والخميس</option>
+                                            <option value="مجموعة الجمعة">مجموعة الجمعة</option>
+                                          </>
+                                        )}
+                                        {editStudentData.group_name && !centerGroups.some(g => g.group_name === editStudentData.group_name) && (
+                                          <option value={editStudentData.group_name}>{editStudentData.group_name}</option>
+                                        )}
+                                      </select>
+                                      <input
+                                        type="text"
+                                        placeholder="أو اكتب اسم مجموعة مخصص..."
+                                        value={editStudentData.group_name || ''}
+                                        onChange={(e) => setEditStudentData({
+                                          ...editStudentData,
+                                          group_name: e.target.value,
+                                          groupName: e.target.value
+                                        })}
+                                        className="w-full bg-stone-950 border border-stone-800 text-stone-300 px-2 py-1 rounded text-[11px] font-bold"
+                                      />
+                                    </div>
+                                  </td>
+                                  <td className="p-4 text-center">
+                                    <button onClick={() => handleSaveStudentEdit(s.id)} className="bg-green-600 hover:bg-green-500 text-stone-100 px-3 py-1 rounded text-xs ml-2">حفظ</button>
+                                    <button onClick={() => setEditingStudent(null)} className="bg-gray-600 hover:bg-gray-500 text-stone-100 px-3 py-1 rounded text-xs">إلغاء</button>
+                                  </td>
+                                </>
+                              ) : (
+                                <>
+                                  <td className="p-4 text-stone-100 uppercase">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span>{s.name}</span>
+                                      {s.is_banned && (
+                                        <span className="bg-red-950/80 border border-red-700 text-red-300 text-[10px] px-2 py-0.5 rounded-md font-black animate-pulse">
+                                          محظور منصة 🛑
+                                        </span>
+                                      )}
+                                      {!s.is_banned && s.is_chat_banned && (
+                                        <span className="bg-amber-950/80 border border-amber-700 text-amber-300 text-[10px] px-2 py-0.5 rounded-md font-black">
+                                          محظور شات 🚫
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="p-4 font-mono text-sky-400">{s.password || 'بلا كلمة مرور'}</td>
+                                  <td className="p-4 text-gray-400 font-mono">
+                                    <div className="flex items-center gap-2">
+                                      <span>{s.phone}</span>
+                                      {s.phone && (
+                                        <a
+                                          href={`https://wa.me/20${s.phone.replace(/\D/g, '').startsWith('0') ? s.phone.replace(/\D/g, '').substring(1) : s.phone.replace(/\D/g, '')}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-400 p-1.5 rounded-lg border border-emerald-700/50 transition"
+                                          title="تواصل واتساب"
+                                        >
+                                          <MessageSquare className="w-3.5 h-3.5" />
+                                        </a>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="p-4 text-gray-300">{s.class_name}</td>
+                                  <td className="p-4 text-gray-300">{s.group_name}</td>
+                                  <td className="p-4 text-center">
+                                    <div className="flex items-center justify-center gap-2 flex-wrap">
+                                      <button 
+                                        onClick={() => {
+                                          setEditingStudent(s.id);
+                                          setEditStudentData(s);
+                                        }} 
+                                        className="text-gray-400 hover:text-stone-100 transition text-xs font-bold"
+                                      >
+                                        تعديل
+                                      </button>
+                                      <button
+                                        onClick={() => setSelectedStudentForAction({
+                                          id: s.id,
+                                          code: s.code,
+                                          name: s.name,
+                                          className: s.class_name || s.className || '',
+                                          is_chat_banned: !!s.is_chat_banned,
+                                          is_banned: !!s.is_banned
+                                        })}
+                                        className="text-xs px-2.5 py-1 rounded-xl border border-amber-600/80 bg-amber-950/40 text-amber-300 hover:bg-amber-900/60 font-black transition flex items-center gap-1"
+                                      >
+                                        <Ban className="w-3 h-3" />
+                                        <span>إدارة الحظر</span>
+                                      </button>
+                                      <button
+                                        onClick={() => handleRejectStudent(s.id, s.name)}
+                                        className="text-xs px-2 py-1 rounded-xl border border-rose-900/60 bg-rose-950/20 text-rose-400 hover:bg-rose-900/40 font-black transition"
+                                        title="حذف الطالب"
+                                      >
+                                        حذف
+                                      </button>
+                                    </div>
+                                  </td>
+                                </>
+                              )}
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
 
             </div>
           )}
@@ -3624,6 +3937,24 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Admin Add Student Modal */}
+      <AdminAddStudentModal
+        isOpen={isAddStudentModalOpen}
+        onClose={() => setIsAddStudentModalOpen(false)}
+        onStudentAdded={(newS) => {
+          setStudents(prev => [newS, ...prev]);
+        }}
+        centerGroups={centerGroups}
+      />
+
+      {/* AI Duplicate Students Detector Modal */}
+      <AdminDuplicateDetector
+        isOpen={isDuplicateDetectorOpen}
+        onClose={() => setIsDuplicateDetectorOpen(false)}
+        students={students}
+        onStudentsUpdated={() => fetchAdminData()}
+      />
     </div>
   );
 }
