@@ -187,7 +187,7 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_lig
   const [selectedAvatar, setSelectedAvatar] = useState<string>('spiderman');
 
   // App Tabs
-  const [activeTab, setActiveTab] = useState<'home' | 'alchemiya' | 'missions' | 'lectures' | 'friday' | 'profile' | 'community' | 'games'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'alchemiya' | 'missions' | 'lectures' | 'friday' | 'profile' | 'community' | 'games'>('alchemiya');
 
   // Real data state
   const [quizzes, setQuizzes] = useState<any[]>([]);
@@ -1963,32 +1963,32 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_lig
     <div className="min-h-screen text-stone-100 flex flex-col relative z-10 font-sans">
       
       {/* Elegant Header */}
-      <header className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-3xl border-b border-cyan-900/50 shadow-2xl">
+      <header className="sticky top-0 z-50 bg-stone-950/90 backdrop-blur-2xl border-b border-stone-800 shadow-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-20 md:h-24">
+          <div className="flex items-center justify-between h-18 md:h-20">
             <div className="flex items-center gap-6">
               {/* Logo / Brand */}
               <div className="flex flex-col">
-                <span className="font-black text-xl md:text-2xl tracking-widest text-cyan-400 uppercase drop-shadow-[0_0_12px_rgba(34,211,238,0.5)]">
+                <span className="font-black text-xl md:text-2xl tracking-widest text-amber-400 uppercase">
                   EL-KHEMIAI
                 </span>
-                <span className="text-[10px] md:text-xs font-bold text-cyan-300/80 tracking-widest uppercase">
+                <span className="text-[10px] md:text-xs font-bold text-stone-400 tracking-widest uppercase">
                   Science & Chemistry
                 </span>
               </div>
             </div>
 
             {/* Desktop Navigation */}
-            <nav className="hidden lg:flex items-center gap-2 bg-slate-900/60 p-1.5 rounded-2xl border border-cyan-500/20">
+            <nav className="hidden lg:flex items-center gap-1.5 bg-stone-900/90 p-1.5 rounded-2xl border border-stone-800">
               {[
-                { id: 'home', label: 'الرئيسية', icon: Home },
+                { id: 'alchemiya', label: 'السنتر', icon: GraduationCap },
+                { id: 'lectures', label: 'المحاضرات', icon: Play },
+                { id: 'missions', label: 'الامتحانات', icon: BookOpen },
                 { id: 'friday', label: 'المساعد الذكي (AI)', icon: Sparkles },
                 { id: 'games', label: 'الألعاب التعليمية', icon: Gamepad2 },
-                { id: 'alchemiya', label: 'تقييم السنتر', icon: GraduationCap },
-                { id: 'missions', label: 'المهام والاختبارات', icon: BookOpen },
-                { id: 'lectures', label: 'المحاضرات', icon: Play },
-                { id: 'community', label: 'مجتمع الخيميائي', icon: Users },
-                { id: 'profile', label: 'ملفي', icon: User }
+                { id: 'community', label: 'مجتمع الطلاب', icon: Users },
+                { id: 'home', label: 'الرئيسية والمستر', icon: Home },
+                { id: 'profile', label: 'البروفايل والدرجات', icon: User }
               ].map(tab => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.id;
@@ -1996,10 +1996,10 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_lig
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id as any)}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-300 ${
+                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 ${
                       isActive 
-                        ? 'bg-cyan-500 text-slate-950 font-black shadow-lg shadow-cyan-500/20 scale-105' 
-                        : 'text-stone-300 hover:text-cyan-300 hover:bg-slate-800/80'
+                        ? 'bg-amber-500 text-stone-950 font-black shadow-md' 
+                        : 'text-stone-300 hover:text-white hover:bg-stone-800'
                     }`}
                   >
                     <Icon className="w-4 h-4" />
@@ -2010,17 +2010,22 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_lig
             </nav>
 
             {/* User Info & Logout */}
-            <div className="flex items-center gap-4">
-              <div className="hidden sm:flex items-center gap-2 bg-slate-900/80 border border-cyan-800/50 px-4 py-2 rounded-xl">
-                <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-                <span className="font-mono text-sm font-bold text-stone-300">{student.code}</span>
-              </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setActiveTab('profile')}
+                className="hidden sm:flex items-center gap-2 bg-stone-900 border border-stone-800 px-3.5 py-2 rounded-xl hover:border-stone-700 transition"
+                title="عرض الملف الشخصي"
+              >
+                <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                <span className="text-xs font-bold text-stone-300">{student.name}</span>
+                <span className="font-mono text-xs font-bold text-amber-400">({student.code})</span>
+              </button>
               <button 
                 onClick={onLogout}
-                className="bg-stone-900 border border-rose-900/50 text-rose-500 hover:bg-rose-600 hover:text-white p-3 rounded-xl transition shadow-lg"
+                className="bg-stone-900 border border-stone-800 text-stone-400 hover:text-rose-400 hover:border-rose-900/50 p-2.5 rounded-xl transition"
                 title="تسجيل الخروج"
               >
-                <LogOut className="w-5 h-5" />
+                <LogOut className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -2028,16 +2033,16 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_lig
       </header>
 
       {/* Mobile Navigation (Bottom) */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-slate-950/95 backdrop-blur-xl border-t border-cyan-900/50 pb-safe">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-stone-950/95 backdrop-blur-xl border-t border-stone-800 pb-safe">
         <div className="flex justify-around items-center p-2 overflow-x-auto">
           {[
-            { id: 'home', label: 'الرئيسية', icon: Home },
-            { id: 'friday', label: 'ذكاء AI', icon: Sparkles },
-            { id: 'games', label: 'ألعاب', icon: Gamepad2 },
             { id: 'alchemiya', label: 'السنتر', icon: GraduationCap },
-            { id: 'missions', label: 'مهام', icon: BookOpen },
             { id: 'lectures', label: 'محاضرات', icon: Play },
-            { id: 'profile', label: 'ملفي', icon: User }
+            { id: 'missions', label: 'امتحانات', icon: BookOpen },
+            { id: 'friday', label: 'ذكاء AI', icon: Sparkles },
+            { id: 'community', label: 'المجتمع', icon: Users },
+            { id: 'home', label: 'الرئيسية', icon: Home },
+            { id: 'profile', label: 'البروفايل', icon: User }
           ].map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -2045,11 +2050,11 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_lig
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`flex flex-col items-center justify-center p-2 rounded-xl transition-all duration-300 w-16 ${
-                  isActive ? 'text-cyan-400 scale-110 font-bold' : 'text-stone-500 hover:text-stone-300'
+                className={`flex flex-col items-center justify-center p-2 rounded-xl transition-all duration-200 w-14 shrink-0 ${
+                  isActive ? 'text-amber-400 scale-105 font-bold' : 'text-stone-500 hover:text-stone-300'
                 }`}
               >
-                <Icon className={`w-6 h-6 mb-1 ${isActive ? 'drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]' : ''}`} />
+                <Icon className="w-5 h-5 mb-1" />
                 <span className="text-[10px] font-black">{tab.label}</span>
               </button>
             );
@@ -2215,244 +2220,111 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_lig
         </AnimatePresence>
 
         
-        {/* Dashboard layout with 2 grid columns */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 relative z-10">
-          
-          {/* Column 1: Profile & Progress HUD */}
-          <div className="lg:col-span-4 space-y-6 order-2 lg:order-1">
-            
-            {/* Monumental teacher portrait */}
-            <div className="bg-stone-900/80 backdrop-blur-md border border-stone-800 rounded-3xl p-8 relative overflow-hidden shadow-2xl group">
-              <div className="absolute inset-0 bg-gradient-to-br from-amber-900/20 to-transparent pointer-events-none" />
-              
-              <div className="text-center relative z-10">
-                <span className="text-xs font-black text-amber-500 bg-amber-950/40 border border-amber-900/60 px-4 py-1.5 rounded-full uppercase tracking-widest inline-block mb-6 shadow-lg">
-                  {teacherSettings.badgeText || 'مؤسس الأكاديمية'}
-                </span>
-                
-                <div className="w-40 h-40 rounded-full border-4 border-stone-800 mx-auto relative p-1 mb-6 shadow-2xl group-hover:scale-105 transition-transform duration-500">
-                  <div className="w-full h-full rounded-full border-2 border-dashed border-amber-500/50 p-1 overflow-hidden">
-                    {!teacherAvatarError ? (
-                      <img
-                        src={teacherSettings.imageUrl || DEFAULT_TEACHER_IMAGE}
-                        alt={teacherSettings.name || "Teacher Portrait"}
-                        onError={() => setTeacherAvatarError(true)}
-                        className="w-full h-full rounded-full object-cover transition-all duration-300"
-                        referrerPolicy="no-referrer"
-                      />
-                    ) : (
-                      <div className="w-full h-full rounded-full bg-stone-800 flex items-center justify-center text-stone-400 text-5xl font-black italic">
-                        {teacherSettings.name ? teacherSettings.name.charAt(0) : 'M'}
-                      </div>
-                    )}
+        {/* Teacher Message Modal */}
+        <AnimatePresence>
+          {showMessageModal && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[100] bg-stone-950/90 backdrop-blur-md flex items-center justify-center p-4"
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.95, opacity: 0, y: 20 }}
+                className="bg-stone-900 border border-stone-800 rounded-3xl p-6 md:p-8 w-full max-w-md shadow-2xl relative overflow-hidden"
+              >
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-xl font-black text-white">مراسلة الأستاذ ✉️</h3>
+                  <button onClick={() => setShowMessageModal(false)} className="text-stone-400 hover:text-white bg-stone-800 p-2 rounded-xl transition">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <form onSubmit={handleSendTeacherMessage} className="space-y-4 text-right">
+                  <textarea
+                    required
+                    className="w-full bg-stone-950 border border-stone-800 focus:border-amber-500 rounded-2xl p-4 text-stone-100 resize-none font-medium placeholder-stone-600 outline-none transition text-sm"
+                    rows={4}
+                    placeholder="اكتب رسالتك أو استفسارك هنا..."
+                    value={messageText}
+                    onChange={e => setMessageText(e.target.value)}
+                  />
+                  <div className="flex items-center gap-3 justify-end bg-stone-950 border border-stone-800 p-3 rounded-xl">
+                    <label htmlFor="anonymous" className="text-xs text-stone-400 font-bold cursor-pointer select-none">إرسال كرسالة مجهولة</label>
+                    <input
+                      id="anonymous"
+                      type="checkbox"
+                      className="w-4 h-4 accent-amber-600 cursor-pointer rounded bg-stone-800 border-stone-700"
+                      checked={isAnonymousMessage}
+                      onChange={e => setIsAnonymousMessage(e.target.checked)}
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={isSendingMessage}
+                    className="w-full bg-amber-500 hover:bg-amber-400 disabled:bg-stone-800 disabled:text-stone-500 text-stone-950 font-black py-3.5 rounded-xl text-base transition shadow-md"
+                  >
+                    {isSendingMessage ? 'جاري الإرسال...' : 'إرسال'}
+                  </button>
+                </form>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Focused Single-Column Layout */}
+        <div className="w-full max-w-5xl mx-auto space-y-6">
+          {activeTab === 'home' && (
+            <div className="space-y-6">
+              {/* Teacher Card in Home Tab */}
+              <div className="bg-stone-900 border border-stone-800 rounded-3xl p-6 md:p-8 relative overflow-hidden shadow-md">
+                <div className="flex flex-col md:flex-row items-center gap-6 text-center md:text-right">
+                  <div className="w-28 h-28 md:w-32 md:h-32 rounded-full border-4 border-stone-800 relative p-1 shadow-lg shrink-0">
+                    <div className="w-full h-full rounded-full border border-dashed border-amber-500/60 p-1 overflow-hidden">
+                      {!teacherAvatarError ? (
+                        <img
+                          src={teacherSettings.imageUrl || DEFAULT_TEACHER_IMAGE}
+                          alt={teacherSettings.name || "Teacher Portrait"}
+                          onError={() => setTeacherAvatarError(true)}
+                          className="w-full h-full rounded-full object-cover transition-all duration-300"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div className="w-full h-full rounded-full bg-stone-800 flex items-center justify-center text-stone-400 text-3xl font-black italic">
+                          {teacherSettings.name ? teacherSettings.name.charAt(0) : 'M'}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="flex-1 space-y-2">
+                    <span className="text-xs font-black text-amber-400 bg-amber-950/60 border border-amber-800/60 px-3 py-0.5 rounded-full uppercase tracking-wider inline-block">
+                      {teacherSettings.badgeText || 'مؤسس الأكاديمية'}
+                    </span>
+                    <h3 className="text-2xl md:text-3xl font-black text-white">
+                      {teacherSettings.name || 'الأستاذ الخيميائي'}
+                    </h3>
+                    <p className="text-sm font-bold text-stone-300">
+                      {teacherSettings.subtitle || 'خبير تدريس مادة العلوم والكيمياء'}
+                    </p>
+                    <div className="bg-stone-950/60 border border-stone-800/80 p-3.5 rounded-2xl text-right mt-2">
+                      <p className="text-xs font-medium text-stone-300 leading-relaxed">
+                        "{teacherSettings.quote || 'الكيمياء ليست مجرد معادلات تُحفظ، بل هي سر فهم الكون وعجائب الطبيعة من حولنا.'}"
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="w-full md:w-auto shrink-0">
+                    <button
+                      onClick={() => setShowMessageModal(true)}
+                      className="w-full md:w-auto flex justify-center items-center gap-2 bg-stone-800 hover:bg-stone-700 text-amber-400 border border-amber-500/30 font-bold px-5 py-3 rounded-2xl transition text-sm"
+                    >
+                      <MessageCircle className="w-4 h-4" /> مراسلة الأستاذ
+                    </button>
                   </div>
                 </div>
-                
-                <h3 className="text-2xl font-black tracking-tight text-white mb-2">
-                  {teacherSettings.name || 'الأستاذ الخيميائي'}
-                </h3>
-                <p className="text-sm font-bold text-cyan-400/80 mb-6">
-                  {teacherSettings.subtitle || 'خبير تدريس مادة العلوم والكيمياء'}
-                </p>
-                
-                {/* Motivational Quote */}
-                <div className="bg-stone-950/50 border border-stone-800 p-5 rounded-2xl text-center relative">
-                  <span className="absolute -top-3 right-4 text-3xl text-cyan-900">"</span>
-                  <p className="text-xs font-bold text-stone-300 leading-relaxed text-right relative z-10">
-                    {teacherSettings.quote || 'الكيمياء ليست مجرد معادلات تُحفظ، بل هي سر فهم الكون وعجائب الطبيعة من حولنا.'}
-                  </p>
-                </div>
-                
-                <button
-                  onClick={() => setShowMessageModal(true)}
-                  className="mt-6 w-full flex justify-center items-center gap-2 bg-stone-800 hover:bg-stone-700 text-stone-300 border border-stone-700 font-bold py-4 rounded-2xl transition shadow-lg group-hover:border-amber-500/50 group-hover:text-amber-400"
-                >
-                  <MessageCircle className="w-5 h-5" /> مراسلة الأستاذ
-                </button>
               </div>
-            </div>
-
-            {/* Teacher Message Modal */}
-            <AnimatePresence>
-              {showMessageModal && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="fixed inset-0 z-[100] bg-stone-950/90 backdrop-blur-md flex items-center justify-center p-4"
-                >
-                  <motion.div
-                    initial={{ scale: 0.95, opacity: 0, y: 20 }}
-                    animate={{ scale: 1, opacity: 1, y: 0 }}
-                    exit={{ scale: 0.95, opacity: 0, y: 20 }}
-                    className="bg-stone-900 border border-stone-800 rounded-3xl p-8 w-full max-w-md shadow-2xl relative overflow-hidden"
-                  >
-                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-600 to-rose-600" />
-                    <div className="flex justify-between items-center mb-8">
-                      <h3 className="text-2xl font-black text-white">صندوق الرسائل</h3>
-                      <button onClick={() => setShowMessageModal(false)} className="text-stone-500 hover:text-white bg-stone-800 p-2 rounded-full transition">
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-                    <form onSubmit={handleSendTeacherMessage} className="space-y-5 text-right">
-                      <textarea
-                        required
-                        className="w-full bg-stone-950 border border-stone-800 focus:border-amber-500 rounded-2xl p-5 text-stone-100 resize-none font-medium placeholder-stone-600 outline-none transition"
-                        rows={5}
-                        placeholder="اكتب رسالتك أو استفسارك هنا..."
-                        value={messageText}
-                        onChange={e => setMessageText(e.target.value)}
-                      />
-                      <div className="flex items-center gap-3 justify-end bg-stone-950 border border-stone-800 p-4 rounded-2xl">
-                        <label htmlFor="anonymous" className="text-sm text-stone-400 font-bold cursor-pointer select-none">إرسال كرسالة مجهولة</label>
-                        <input
-                          id="anonymous"
-                          type="checkbox"
-                          className="w-5 h-5 accent-amber-600 cursor-pointer rounded bg-stone-800 border-stone-700"
-                          checked={isAnonymousMessage}
-                          onChange={e => setIsAnonymousMessage(e.target.checked)}
-                        />
-                      </div>
-                      <button
-                        type="submit"
-                        disabled={isSendingMessage}
-                        className="w-full bg-amber-600 hover:bg-amber-500 disabled:bg-stone-800 disabled:text-stone-500 text-stone-950 font-black py-4 rounded-2xl text-lg transition shadow-lg"
-                      >
-                        {isSendingMessage ? 'جاري الإرسال...' : 'إرسال'}
-                      </button>
-                    </form>
-                  </motion.div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Student statistics panel */}
-            <div className="bg-stone-900/80 backdrop-blur-md border border-stone-800 rounded-3xl p-6 space-y-6 shadow-xl">
-              <div className="flex justify-between items-center border-b border-stone-800 pb-4">
-                <h4 className="font-black text-stone-300 text-sm tracking-widest uppercase">
-                  رمز العالم / الخيميائي 🧪
-                </h4>
-                <Shield className="w-5 h-5 text-cyan-400" />
-              </div>
-              
-              {/* Dynamic Chemist Avatar Icon Frame */}
-              <div className="flex items-center gap-5 bg-stone-950/50 border border-stone-800 p-4 rounded-2xl">
-                <div className="w-16 h-16 rounded-full border-2 border-cyan-400 overflow-hidden shadow-lg flex-shrink-0 flex items-center justify-center bg-cyan-950">
-                  <span className="text-3xl">
-                    {selectedAvatar === 'ironman' ? '⚛️' :
-                     selectedAvatar === 'captainamerica' ? '🔬' :
-                     selectedAvatar === 'thor' ? '⚗️' :
-                     selectedAvatar === 'blackwidow' ? '🧬' :
-                     selectedAvatar === 'hulk' ? '💥' :
-                     selectedAvatar === 'doctorstrange' ? '🔮' :
-                     '🧪'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-xs font-black text-cyan-400 block mb-1">الرمز العلمي الحالي</span>
-                  <span className="text-base font-black text-white block">
-                    {selectedAvatar === 'ironman' ? 'د. أحمد زويل (رائد الفيمتو) ⚛️' :
-                     selectedAvatar === 'captainamerica' ? 'ديمتري مندليف (الجدول الدوري) 🔬' :
-                     selectedAvatar === 'thor' ? 'ماري كوري (عالمة الكيمياء) ⚗️' :
-                     selectedAvatar === 'blackwidow' ? 'ابن الهيثم (رائد العلوم) 🧬' :
-                     selectedAvatar === 'hulk' ? 'ألبيرت أينشتاين (الكيمياء النظرية) 💥' :
-                     selectedAvatar === 'doctorstrange' ? 'جون دالتون (النظرية الذرية) 🔮' :
-                     'جابر بن حيان (أستاذ الكيمياء) 🧪'}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Dynamic Comprehensive Academic Performance & Percentage HUD */}
-            <div className="bg-stone-900/90 backdrop-blur-md border border-cyan-500/30 rounded-3xl p-6 shadow-2xl relative overflow-hidden space-y-5">
-              <div className="flex justify-between items-center border-b border-stone-800 pb-3">
-                <h4 className="font-black text-cyan-400 text-sm tracking-wider uppercase flex items-center gap-2">
-                  <Award className="w-5 h-5 text-amber-400" />
-                  <span>التقييم والنسبة المئوية الشاملة 📊</span>
-                </h4>
-                <span className="text-[11px] font-black bg-cyan-950/80 border border-cyan-800 text-cyan-300 px-2.5 py-0.5 rounded-full">
-                  تراكمي
-                </span>
-              </div>
-
-              {/* Main Circular / Hero Metric for Overall Percentage */}
-              <div className="bg-stone-950/70 border border-stone-800 p-4 rounded-2xl text-center relative">
-                <span className="text-xs font-bold text-stone-400 block mb-1">
-                  النسبة المئوية العامة المجمعة (الامتحانات + السنتر)
-                </span>
-                <div className="flex items-baseline justify-center gap-1.5 my-2">
-                  <span className="text-5xl font-black text-amber-400 tracking-tight font-mono">
-                    {studentStats.overallPercentage}%
-                  </span>
-                </div>
-                
-                {/* Progress bar */}
-                <div className="w-full bg-stone-900 h-3 rounded-full overflow-hidden p-[2px] border border-stone-800 mt-2">
-                  <div 
-                    className="bg-gradient-to-r from-cyan-500 via-amber-400 to-emerald-400 h-full rounded-full transition-all duration-1000 shadow-md"
-                    style={{ width: `${Math.min(studentStats.overallPercentage, 100)}%` }}
-                  />
-                </div>
-
-                <div className="flex justify-between items-center text-xs font-bold text-stone-300 mt-3 pt-2 border-t border-stone-800/80">
-                  <span className="text-stone-400">إجمالي الدرجات المحصلة:</span>
-                  <span className="font-mono text-cyan-300 text-sm font-black">
-                    {studentStats.totalEarnedScore} / {studentStats.totalPossibleScore} درجة
-                  </span>
-                </div>
-              </div>
-
-              {/* Detailed Breakdown cards */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-stone-950/50 border border-stone-800/80 p-3 rounded-2xl text-right">
-                  <span className="text-[11px] font-bold text-stone-400 block mb-1">📝 امتحانات المنصة</span>
-                  <span className="text-sm font-black font-mono text-sky-300 block">
-                    {studentStats.examEarned} / {studentStats.examMax}
-                  </span>
-                  <span className="text-[10px] font-bold text-stone-400 block mt-0.5">
-                    النسبة: {studentStats.examPct}%
-                  </span>
-                </div>
-
-                <div className="bg-stone-950/50 border border-stone-800/80 p-3 rounded-2xl text-right">
-                  <span className="text-[11px] font-bold text-stone-400 block mb-1">🏢 درجات السنتر</span>
-                  <span className="text-sm font-black font-mono text-emerald-300 block">
-                    {studentStats.centerEarned} / {studentStats.centerMax}
-                  </span>
-                  <span className="text-[10px] font-bold text-stone-400 block mt-0.5">
-                    النسبة: {studentStats.centerPct}%
-                  </span>
-                </div>
-              </div>
-
-              {/* Academic Rank & Badge Display */}
-              <div className="bg-stone-950/50 border border-stone-800 p-3.5 rounded-2xl flex items-center gap-3.5">
-                <div className="p-3 bg-amber-950/40 border border-amber-800/60 rounded-xl text-amber-400 font-black text-2xl shrink-0">
-                  🎖️
-                </div>
-                <div className="text-right flex-1 min-w-0">
-                  <span className={`text-sm font-black ${currentLevelInfo.color} block truncate`}>
-                    {currentLevelInfo.badge}
-                  </span>
-                  <span className="text-[11px] font-bold text-stone-400 block mt-0.5 leading-snug">
-                    {currentLevelInfo.desc}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-          </div>
-
-          {/* Column 2 & 3: Content area with custom Tabs */}
-          <div className="lg:col-span-8 space-y-6 order-1 lg:order-2">
-
-          <div className="lg:col-span-2 space-y-6">
-            
-            {/* Tab view renders */}
-            <div>
-              
-              {activeTab === 'home' && (
-                <div className="space-y-8">
                   
                   {/* Majestic Hero Banner */}
                   <div className="relative w-full overflow-hidden rounded-3xl border border-white/10 shadow-2xl group min-h-[400px] flex items-end">
@@ -2824,7 +2696,58 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_lig
               )}
 
               {activeTab === 'profile' && (
-                <div className="space-y-8">
+                <div className="space-y-6">
+                  {/* STUDENT IDENTITY & ACADEMIC RANK CARD */}
+                  <div className="bg-stone-900 border border-stone-800 rounded-3xl p-6 md:p-8 relative overflow-hidden shadow-md">
+                    <div className="flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-right">
+                      <div className="flex flex-col md:flex-row items-center gap-5">
+                        <div className="w-20 h-20 rounded-2xl bg-stone-950 border border-stone-800 flex items-center justify-center text-4xl shadow-inner shrink-0">
+                          {selectedAvatar === 'ironman' ? '⚛️' :
+                           selectedAvatar === 'captainamerica' ? '🔬' :
+                           selectedAvatar === 'thor' ? '⚗️' :
+                           selectedAvatar === 'blackwidow' ? '🧬' :
+                           selectedAvatar === 'hulk' ? '💥' :
+                           selectedAvatar === 'doctorstrange' ? '🔮' :
+                           '🧪'}
+                        </div>
+                        <div>
+                          <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 mb-2">
+                            <span className="text-xs font-black bg-amber-500 text-stone-950 px-2.5 py-0.5 rounded-full">
+                              بيانات الطالب
+                            </span>
+                            <span className="text-xs font-mono font-bold bg-stone-800 text-stone-200 px-3 py-0.5 rounded-full border border-stone-700">
+                              كود الطالب: {student.code}
+                            </span>
+                          </div>
+                          <h3 className="text-2xl md:text-3xl font-black text-white">
+                            {student.name}
+                          </h3>
+                          <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 text-xs font-bold text-stone-400 mt-2">
+                            <span>الصف: <span className="text-stone-200">{student.className || 'العام الدراسي'}</span></span>
+                            {student.groupName && <span>• المجموعة: <span className="text-stone-200">{student.groupName}</span></span>}
+                            {student.phone && <span>• الهاتف: <span className="text-stone-200 font-mono">{student.phone}</span></span>}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Academic Rank Badge */}
+                      <div className="bg-stone-950/70 border border-stone-800 p-4 rounded-2xl flex items-center gap-3.5 shrink-0 text-right">
+                        <div className="p-3 bg-amber-950/40 border border-amber-800/60 rounded-xl text-amber-400 text-2xl">
+                          🎖️
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-stone-400 block">الرتبة والمستوى الأكاديمي</span>
+                          <span className={`text-base font-black ${currentLevelInfo.color} block`}>
+                            {currentLevelInfo.badge}
+                          </span>
+                          <span className="text-[11px] font-bold text-stone-400 block mt-0.5">
+                            {currentLevelInfo.desc}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* SCIENTIST AVATAR SELECTION */}
                   <div className="bg-stone-900 border border-stone-800 shadow-xl p-6 rounded-2xl">
                     <div className="border-b-2 border-gray-800 pb-3 mb-4 text-right">
@@ -3198,9 +3121,9 @@ export default function StudentDashboard({ onLogout, currentTheme = 'khemiai_lig
                   onNavigateProfile={() => setActiveTab('profile')}
                 />
               )}
-            </div>
+        </div>
 
-          </div></div></div>{/* GLOBAL DESIGNER AND DEVELOPER FOOTER */}
+        {/* GLOBAL DESIGNER AND DEVELOPER FOOTER */}
         <div className="mt-16 pt-8 border-t border-gray-900/80 flex flex-col items-center gap-4 text-center max-w-2xl mx-auto pb-6">
           <p className="text-xs md:text-sm font-black text-gray-500 uppercase tracking-widest">
             Designed & Developed by <span className="text-amber-600 font-extrabold shadow-sm">Abdelrahman Tarek</span>
