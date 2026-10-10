@@ -1,11 +1,111 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import StudentDashboard from './components/StudentDashboard';
 import AdminDashboard from './components/AdminDashboard';
 import AppDownloadPrompt from './components/AppDownloadPrompt';
+import MaintenanceScreen from './components/MaintenanceScreen';
+import { db } from './lib/firebase';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 
 export default function App() {
   const [portal, setPortal] = useState<'student' | 'admin'>('student');
   const [theme, setTheme] = useState<'khemiai_light' | 'khemiai_dark' | 'atomic_glow' | 'deep_emerald'>('khemiai_light');
+  
+  // Developer maintenance kill-switch states
+  const [isMaintenanceMode, setIsMaintenanceMode] = useState<boolean>(false);
+  const [maintenanceMessage, setMaintenanceMessage] = useState<string>('الموقع تحت الصيانة حالياً');
+  const [isDevBypassed, setIsDevBypassed] = useState<boolean>(() => {
+    return typeof window !== 'undefined' && sessionStorage.getItem('khemiai_dev_bypass') === 'true';
+  });
+
+  // Check URL query parameters for developer bypass
+  useEffect(() => {
+    const queryParams = new URLSearchParams(window.location.search);
+    const bypassKey = queryParams.get('dev_bypass') || queryParams.get('dev_key');
+    if (bypassKey === 'dev_secret_2026_khemiai') {
+      sessionStorage.setItem('khemiai_dev_bypass', 'true');
+      setIsDevBypassed(true);
+    }
+  }, []);
+
+  // Real-time Firestore sync for instant maintenance mode updates across all clients
+  useEffect(() => {
+    let unsubscribe: () => void = () => {};
+    try {
+      const systemDocRef = doc(db, 'settings', 'system_control');
+      unsubscribe = onSnapshot(systemDocRef, (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          const active = data.active !== undefined 
+            ? Boolean(data.active) 
+            : (data.isMaintenance === true ? false : true);
+
+          setIsMaintenanceMode(!active);
+          if (data.message) {
+            setMaintenanceMessage(data.message);
+          }
+        }
+      }, (err) => {
+        console.warn('[App] Firestore system listener note:', err);
+      });
+    } catch (e) {
+      console.warn('[App] Firestore connection note:', e);
+    }
+
+    return () => unsubscribe();
+  }, []);
+
+  // Direct backend API check as secondary authoritative source
+  const checkApiMaintenance = useCallback(async () => {
+    try {
+      const res = await fetch('/api/maintenance');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.active === false || data.maintenance === true) {
+          setIsMaintenanceMode(true);
+          if (data.message) setMaintenanceMessage(data.message);
+        } else if (data.active === true) {
+          setIsMaintenanceMode(false);
+        }
+      }
+    } catch (err) {
+      console.warn('[App] API maintenance check note:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkApiMaintenance();
+    const interval = setInterval(checkApiMaintenance, 20000);
+    return () => clearInterval(interval);
+  }, [checkApiMaintenance]);
+
+  // Handler for developer toggle inside MaintenanceScreen
+  const handleToggleStatus = async (targetActive: boolean, key: string): Promise<boolean> => {
+    try {
+      const res = await fetch('/api/maintenance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, active: targetActive })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsMaintenanceMode(!targetActive);
+        try {
+          await setDoc(doc(db, 'settings', 'system_control'), {
+            active: targetActive,
+            isMaintenance: !targetActive,
+            message: targetActive ? 'المنصة تعمل بصورة طبيعية' : 'الموقع تحت الصيانة حالياً',
+            updatedAt: new Date().toISOString()
+          }, { merge: true });
+        } catch (e) {
+          console.warn('[App] Firestore sync note:', e);
+        }
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  };
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('khemiai_theme') as 'khemiai_light' | 'khemiai_dark' | 'atomic_glow' | 'deep_emerald';
@@ -104,6 +204,18 @@ export default function App() {
       image: 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?q=80&w=2070&auto=format&fit=crop' // Science & Chemistry Lab
     };
   };
+
+  // If Maintenance mode is active and developer has not bypassed, render ONLY MaintenanceScreen!
+  if (isMaintenanceMode && !isDevBypassed) {
+    return (
+      <MaintenanceScreen 
+        message={maintenanceMessage} 
+        onRefresh={checkApiMaintenance} 
+        onBypass={() => setIsDevBypassed(true)}
+        onToggleStatus={handleToggleStatus}
+      />
+    );
+  }
 
   const bgDetails = getBackgroundDetails();
 

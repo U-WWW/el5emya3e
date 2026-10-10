@@ -3,6 +3,7 @@ import studentAiHandler from "./student-ai.js";
 import teacherAiHandler from "./teacher-ai.js";
 import verifyChatHandler from "./verify-chat.js";
 import healthHandler from "./health.js";
+import maintenanceHandler from "./maintenance.js";
 
 export const app = express();
 
@@ -15,6 +16,9 @@ app.use((req: any, res, next) => {
 
 // Register modular handlers on the Express app
 app.get("/api/health", healthHandler);
+app.get("/api/maintenance", maintenanceHandler);
+app.post("/api/maintenance", maintenanceHandler);
+app.all("/api/system-control", maintenanceHandler);
 app.post("/api/student-ai", studentAiHandler);
 app.post("/api/teacher-ai", teacherAiHandler);
 app.post("/api/verify-chat", verifyChatHandler);
