@@ -1,6 +1,6 @@
 {
-  "active": false,
-  "maintenance": true,
-  "message": "الموقع تحت الصيانة والتحديث حالياً.. يرجى العودة لاحقاً",
-  "updatedAt": "2026-10-10T19:02:32.516Z"
+  "active": true,
+  "maintenance": false,
+  "message": "المنصة تعمل بصورة طبيعية",
+  "updatedAt": "2026-10-13T15:15:00.000Z"
 }
